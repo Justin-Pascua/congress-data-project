@@ -1,5 +1,5 @@
 import httpx
-from .config import settings
+from ..config import settings
 
 API_KEY = settings.API_KEY.get_secret_value()
 BASE_URL = 'https://api.congress.gov/v3'

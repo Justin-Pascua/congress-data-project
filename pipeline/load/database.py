@@ -2,7 +2,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from urllib.parse import quote_plus
-from .config import settings
+from ..config import settings
 
 DB_USER = settings.DB_USER.get_secret_value()
 DB_PASSWORD_ENCODED = quote_plus(settings.DB_PASSWORD.get_secret_value()).replace('%', '%%')   # url encoding
