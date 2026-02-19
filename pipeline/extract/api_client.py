@@ -196,10 +196,10 @@ class CongressAPIClient:
         while True:
             response = await self._request_with_retry('get', f'/bill/{congress_num}/{bill_type}/{bill_num}/cosponsors', params = {'offset': 250*i})
             data = response.json()
-            print(f'i: {i}')
-            print(data)
             
-            if len(data['cosponsors']) == 0:
+            if i == 0 and data['pagination']['count'] < 250:
+                break
+            elif len(data['cosponsors']) == 0:
                 break
             cosponsors.extend(data['cosponsors'])
             i += 1
