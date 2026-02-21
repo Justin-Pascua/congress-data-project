@@ -6,7 +6,8 @@ from ..exceptions import *
 
 
 BASE_URL = 'https://api.congress.gov/v3'
-
+RATE_THRESHOLD = 100
+NUM_RETRIES = 5
 class CongressAPIClient:
     def __init__(self, api_key: str):
         base_params = {
@@ -22,12 +23,15 @@ class CongressAPIClient:
             timeout = 30,
             limits = httpx.Limits(max_connections = 10,
                                   max_keepalive_connections = 5))
+        
+        response = httpx.get(BASE_URL + '/congress/current', params = base_params)
+        self.remaining_calls = response.headers['x-ratelimit-remaining']
 
-    async def _check_exceptions(self, response: httpx.Response):
+    def _check_exceptions(self, response: httpx.Response):
         """
         Checks response for common 5xx or 4xx status codes, and raises exception if found.
         Args:
-            response: an `httpx.Response` instance representing the Congress API's response to some call.
+            response: An `httpx.Response` instance representing the Congress API's response to some call.
         """
         status_code = response.status_code
         if status_code >= 500:
@@ -37,16 +41,42 @@ class CongressAPIClient:
         elif status_code == 403:
             raise AuthorizationError("No API key, or invalid API key sent in request.")
         
+    def _update_call_counter(self, response: httpx.Response):
+        """
+        Updates the internal counter for number of remaining calls using info in header of response sent by API
+        Args:
+            response: An `httpx.Response` instance representing the Congress API's response to some call.
+        """
+        self.remaining_calls = response.headers['x-ratelimit-remaining']
+
+    def _check_rate_limit(self):
+        """
+        Checks if number of remaining API calls is above `RATE_THRESHOLD`. 
+        Raises `RateLimitError` if threshold has been met.
+        """
+        if self.remaining_calls <= RATE_THRESHOLD:
+            raise RateLimitError("API rate limit threshold met")
+
     async def _request_with_retry(self, method: str, url: str, **kwargs):
-        max_attempts = 5
+        """
+        Wrapper for API calls. Calls `self._check_rate_limit` to remain within API rate limit,
+        performs retries with exponential backoff, and calls `self._update_call_counter` to update internal counter.
+        Args:
+            method: A string specifying the HTTP method, usually "get"
+            url: The url of the endpoint to be called
+        """
+        # exponential backoff retry
         base_delay = 0.5
-        for attempt in range(max_attempts):
+
+        for attempt in range(NUM_RETRIES):
+            self._check_rate_limit()
             try:
                 response = await self.client.request(method, url, **kwargs)
-                await self._check_exceptions(response)
+                self._check_exceptions(response)
+                self._update_call_counter(response)
                 return response
             except (httpx.ConnectError, httpx.ReadTimeout, RuntimeError) as e:
-                if attempt == max_attempts - 1:
+                if attempt == NUM_RETRIES - 1:
                     raise 
 
                 delay = base_delay * (2 ** attempt)
