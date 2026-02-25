@@ -8,6 +8,7 @@ from ..exceptions import *
 BASE_URL = 'https://api.congress.gov/v3'
 RATE_THRESHOLD = 100
 NUM_RETRIES = 5
+
 class CongressAPIClient:
     def __init__(self, api_key: str):
         base_params = {
@@ -25,7 +26,7 @@ class CongressAPIClient:
                                   max_keepalive_connections = 5))
         
         response = httpx.get(BASE_URL + '/congress/current', params = base_params)
-        self.remaining_calls = response.headers['x-ratelimit-remaining']
+        self.remaining_calls = int(response.headers['x-ratelimit-remaining'])
 
     def _check_exceptions(self, response: httpx.Response):
         """
@@ -47,7 +48,7 @@ class CongressAPIClient:
         Args:
             response: An `httpx.Response` instance representing the Congress API's response to some call.
         """
-        self.remaining_calls = response.headers['x-ratelimit-remaining']
+        self.remaining_calls = int(response.headers['x-ratelimit-remaining'])
 
     def _check_rate_limit(self):
         """
@@ -227,11 +228,12 @@ class CongressAPIClient:
             response = await self._request_with_retry('get', f'/bill/{congress_num}/{bill_type}/{bill_num}/cosponsors', params = {'offset': 250*i})
             data = response.json()
             
+            cosponsors.extend(data['cosponsors'])
             if i == 0 and data['pagination']['count'] < 250:
                 break
             elif len(data['cosponsors']) == 0:
                 break
-            cosponsors.extend(data['cosponsors'])
+            
             i += 1
 
         return cosponsors

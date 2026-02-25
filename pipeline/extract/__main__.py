@@ -1,5 +1,11 @@
 from .api_client import CongressAPIClient
+from .status import ExtractStatus
 from ..config import settings
+from ..exceptions import *
+
+import pandas as pd
+
+import os
 import time
 from typing import List, Optional, Literal
 
@@ -18,6 +24,7 @@ client = CongressAPIClient(settings.API_KEY.get_secret_value())
 async def extract_reps(congress_num: int):
     # get all reps
     representatives = await client.get_all_members(congress_num)
+    return representatives
 
 async def get_bill_ids(congress_num: int = None) -> List[tuple]:
     """
@@ -35,32 +42,57 @@ async def get_bill_ids(congress_num: int = None) -> List[tuple]:
 
     return bill_ids
 
-async def write_progress():
-    # initializes progress file
-    pass
+async def initialize_progress(congress_num: int, bill_ids = List[tuple]) -> None:
+    df = pd.DataFrame(bill_ids, columns = ['Bill Type', 'Bill Number'])
+    df['Status'] = ExtractStatus.UNATTEMPTED.value
 
-async def update_progress():
-    # updates progress file
-    pass
+    output_dir = f'./progress/congress-{congress_num}'
+    output_filename = 'bill-ids.csv'
+    full_path = os.path.join(output_dir, output_filename)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
-async def read_progress():
-    # reads progress file
-    pass
+    df.to_csv(full_path, index = False)
 
-async def batch_extract_bill_info(congress_num: int, bill_ids: list):
-    # get detailed bill info and cosponsors
+async def read_progress(congress_num: int) -> pd.DataFrame:
+    target_dir = f'./progress/congress-{congress_num}'
+    file_name = 'bill-ids.csv'
+    full_path = os.path.join(target_dir, file_name)
+
+    df = pd.read_csv(full_path)
+    return df
+
+async def update_progress(congress_num: int, updated_progress_df: pd.DataFrame) -> None:
+    output_dir = f'./progress/congress-{congress_num}'
+    output_filename = 'bill-ids.csv'
+    full_path = os.path.join(output_dir, output_filename)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    updated_progress_df.to_csv(full_path, index = False)
+
+async def batch_extract_bill_info(congress_num: int, unattempted_bills: pd.DataFrame) -> dict:
+    
     bills_detailed = {type: dict() for type in VALID_BILL_TYPES}
     bill_cosponsors = {type: dict() for type in VALID_BILL_TYPES}
 
-    for bill_identifier in bill_ids:
-        bill_type, bill_num = bill_identifier
-
-        bill_info = await client.get_bill_info(congress_num, bill_type, bill_num)
-        bills_detailed[bill_type][bill_num] = bill_info
+    for row_num in unattempted_bills.index:
+        row = unattempted_bills.iloc[row_num]
+        bill_type, bill_num = row[['Bill Type', 'Bill Number']]
         
-        cosponsors = await client.get_bill_cosponsors(congress_num, bill_type, bill_num)
-        bill_cosponsors[bill_type][bill_num] = cosponsors
+        try:
+            bill_info = await client.get_bill_info(congress_num, bill_type, bill_num)
+            bills_detailed[bill_type][bill_num] = bill_info
+            
+            cosponsors = await client.get_bill_cosponsors(congress_num, bill_type, bill_num)
+            bill_cosponsors[bill_type][bill_num] = cosponsors
+
+            unattempted_bills.at[row_num, "Status"] = ExtractStatus.EXTRACTED.value
+        except RateLimitError as e:
+            print(e)
+            break
+    
+    await update_progress(congress_num, unattempted_bills)
 
     return {'bills': bills_detailed,
             'cosponsors': bill_cosponsors}
-
