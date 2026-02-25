@@ -28,7 +28,7 @@ class CongressAPIClient:
         response = httpx.get(BASE_URL + '/congress/current', params = base_params)
         self.remaining_calls = int(response.headers['x-ratelimit-remaining'])
 
-    def _check_exceptions(self, response: httpx.Response):
+    def _check_exceptions(self, response: httpx.Response) -> None:
         """
         Checks response for common 5xx or 4xx status codes, and raises exception if found.
         Args:
@@ -42,7 +42,7 @@ class CongressAPIClient:
         elif status_code == 403:
             raise AuthorizationError("No API key, or invalid API key sent in request.")
         
-    def _update_call_counter(self, response: httpx.Response):
+    def _update_call_counter(self, response: httpx.Response) -> None:
         """
         Updates the internal counter for number of remaining calls using info in header of response sent by API
         Args:
@@ -50,7 +50,7 @@ class CongressAPIClient:
         """
         self.remaining_calls = int(response.headers['x-ratelimit-remaining'])
 
-    def _check_rate_limit(self):
+    def _check_rate_limit(self) -> None:
         """
         Checks if number of remaining API calls is above `RATE_THRESHOLD`. 
         Raises `RateLimitError` if threshold has been met.
@@ -58,7 +58,7 @@ class CongressAPIClient:
         if self.remaining_calls <= RATE_THRESHOLD:
             raise RateLimitError("API rate limit threshold met")
 
-    async def _request_with_retry(self, method: str, url: str, **kwargs):
+    async def _request_with_retry(self, method: str, url: str, **kwargs) -> httpx.Response:
         """
         Wrapper for API calls. Calls `self._check_rate_limit` to remain within API rate limit,
         performs retries with exponential backoff, and calls `self._update_call_counter` to update internal counter.
@@ -100,7 +100,7 @@ class CongressAPIClient:
         """
         Returns all the congress members from a specified congress.
         Args:
-            congress_num: the number of the Congress (e.g. 119)
+            congress_num: the number of the congress (e.g. 119)
         """
         members = []
 
@@ -122,7 +122,7 @@ class CongressAPIClient:
         """
         Returns a list of all bills in a specified congress of a specified type.
         Args:
-            congress_num: the number of the Congress (e.g. 119)
+            congress_num: the number of the congress (e.g. 119)
             bill_type: the type of bill. Acceptable values are "hr", "s", "hjres", "sjres", "hconres", "sconres", "hres", or "sres"
         """
         bills = []
@@ -176,7 +176,7 @@ class CongressAPIClient:
         If not found, then this method then tries to find a summary from the "/bill/{congress_num}/{bill_type}/{bill_num}/text" endpoint.
         If this fails, then the summary is left as `None`.
         Args:
-            congress_num: the number of the Congress (e.g. 119)
+            congress_num: the number of the congress (e.g. 119)
             bill_type: the type of bill. Acceptable values are "hr", "s", "hjres", "sjres", "hconres", "sconres", "hres", or "sres"
             bill_num: the bill's assigned number (e.g. 3076)
         """
@@ -204,7 +204,7 @@ class CongressAPIClient:
         """
         Returns information on a specified bill, including its title, type, chamber of origin, sponsor, and policy area
         Args:
-            congress_num: the number of the Congress (e.g. 119)
+            congress_num: the number of the congress (e.g. 119)
             bill_type: the type of bill. Acceptable values are "hr", "s", "hjres", "sjres", "hconres", "sconres", "hres", or "sres"
             bill_num: the bill's assigned number (e.g. 3076)
         """
@@ -217,7 +217,7 @@ class CongressAPIClient:
         """
         Returns the list of representatives that cosponsored a specified bill
         Args:
-            congress_num: the number of the Congress (e.g. 119)
+            congress_num: the number of the congress (e.g. 119)
             bill_type: the type of bill. Acceptable values are "hr", "s", "hjres", "sjres", "hconres", "sconres", "hres", or "sres"
             bill_num: the bill's assigned number (e.g. 3076)
         """
