@@ -35,17 +35,27 @@ def transform_bills(raw_bills: List[dict]) -> List[BillClean]:
     
     return result
 
-def transform_bill_membership(raw_bills: List[dict]) -> List[BillSponsorshipClean]:
+def transform_bill_sponsorship(raw_bills: List[dict]) -> List[BillSponsorshipClean]:
     result = []
 
     for raw_bill in raw_bills:
-        bill_members = raw_bill['bill']['sponsors'] + raw_bill['cosponsors']
-        for member in bill_members:
+        for member in raw_bill['bill']['sponsors']:
             membership = BillSponsorshipClean(
                 bio_guide_id = member['bioguideId'],
                 congress_num = raw_bill['bill']['congress'],
                 bill_type = raw_bill['bill']['type'],
-                bill_num = raw_bill['bill']['number']
+                bill_num = raw_bill['bill']['number'],
+                sponsorship_type = 'sponsor'
+            )
+            result.append(membership)
+
+        for member in raw_bill['cosponsors']:
+            membership = BillSponsorshipClean(
+                bio_guide_id = member['bioguideId'],
+                congress_num = raw_bill['bill']['congress'],
+                bill_type = raw_bill['bill']['type'],
+                bill_num = raw_bill['bill']['number'],
+                sponsorship_type = 'cosponsor'
             )
             result.append(membership)
     
