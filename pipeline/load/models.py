@@ -1,17 +1,9 @@
-import enum
 from typing import List, Optional
 from datetime import datetime
 from sqlalchemy import (String, Integer, DateTime, Enum, Text,
                         ForeignKey, UniqueConstraint)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, declarative_base
-
-class Chamber(enum.Enum):
-    HR = "House of Representatives"
-    S = "Senate"
-
-class SponsorshipType(enum.Enum):
-    SPONSOR = "sponsor"
-    COSPONSOR = "cosponsor"
+from .transform.enums import Chamber, SponsorshipType
 
 Base = declarative_base()
 
