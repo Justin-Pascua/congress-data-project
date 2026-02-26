@@ -17,14 +17,12 @@ class CongressAPIClient:
         }
         
         self.client = httpx.AsyncClient(
-            http2 = True,
             base_url = BASE_URL,
             params = base_params, 
             follow_redirects = True, 
             timeout = 15,
-            limits = httpx.Limits(max_connections = 40,
-                                  max_keepalive_connections = 20,
-                                  keepalive_expiry = 60))
+            limits = httpx.Limits(max_connections = 10,
+                                  max_keepalive_connections = 5))
         
         response = httpx.get(BASE_URL + '/congress/current', params = base_params)
         self.remaining_calls = int(response.headers['x-ratelimit-remaining'])

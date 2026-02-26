@@ -2,7 +2,7 @@ from .api_client import CongressAPIClient
 from .status import ExtractStatus
 from ..config import settings
 from ..exceptions import *
-from ..transform.enums import BillTypes
+from ..transform.enums import BillType
 
 import pandas as pd
 
@@ -17,7 +17,7 @@ from typing import List, Optional, Literal
 # - after an hour, continue running extraction until failure
 # - continue until all bills have been extracted
 
-VALID_BILL_TYPES = [member.value for member in BillTypes]
+VALID_BILL_TYPES = [member.value for member in BillType]
 
 client = CongressAPIClient(settings.API_KEY.get_secret_value())
 
@@ -86,6 +86,9 @@ async def read_progress(congress_num: int) -> pd.DataFrame:
 async def update_progress(congress_num: int, updated_progress_df: pd.DataFrame) -> None:
     """
     Updates progress file given a dataframe containing the updated info
+    Args:
+        congress_num: the number of the congress (e.g. 119) 
+        update_progress_df: a `pd.DataFrame` containing the updated extraction statuses of the bills
     """
     output_dir = f'./progress/congress-{congress_num}'
     output_filename = 'bill-ids.csv'
@@ -94,7 +97,17 @@ async def update_progress(congress_num: int, updated_progress_df: pd.DataFrame) 
     updated_progress_df.to_csv(path, index = False)
 
 async def batch_extract_bill_info(congress_num: int, progress_df: pd.DataFrame, 
-                                  limit: int = 250, log_porgress: bool = True) -> list:
+                                  limit: int = 250, log_progress: bool = True) -> list:
+    """
+    Returns list of bill info in a specified congress using bill identifiers specified by `progress_df`. 
+    Note that extraction will stop if the API rate limit is reached.
+    Args:
+        congress_num: the number of the congress (e.g. 119)
+        progress_df: a `pd.DataFrame` as outputted by the `read_progress` function
+        limit: the max number of bills to extract
+        log_progress: a bool specifiyng whether or not to call `update_progress` to update the progress file. 
+        If `True`, then `update_progress` is called. Otherwise, `update_progress` is not called.
+    """
     
     result = []
     
@@ -109,12 +122,12 @@ async def batch_extract_bill_info(congress_num: int, progress_df: pd.DataFrame,
         
         try:
             bill_info = await client.get_bill_info(congress_num, bill_type, bill_num)            
-            # bill_summary = await client.get_bill_summary(congress_num, bill_type, bill_num)
+            bill_summary = await client.get_bill_summary(congress_num, bill_type, bill_num)
             cosponsors = await client.get_bill_cosponsors(congress_num, bill_type, bill_num)
 
             unattempted_bills.at[row_num, "Status"] = ExtractStatus.EXTRACTED.value
             current_item = {'bill': bill_info,
-                            # 'summary': bill_summary,
+                            'summary': bill_summary,
                             'cosponsors': cosponsors}
             result.append(current_item)
         except RateLimitError as e:
@@ -124,7 +137,7 @@ async def batch_extract_bill_info(congress_num: int, progress_df: pd.DataFrame,
             unattempted_bills.at[row_num, "Status"] = ExtractStatus.FAILED.value
 
     
-    if log_porgress:
+    if log_progress:
         progress_df[progress_df['Status'] == ExtractStatus.UNATTEMPTED.value] = unattempted_bills
         await update_progress(congress_num, progress_df)
 

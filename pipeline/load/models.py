@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import (String, Integer, DateTime, Enum, Text,
                         ForeignKey, UniqueConstraint)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, declarative_base
-from .transform.enums import Chamber, SponsorshipType
+from ..transform.enums import Chamber, SponsorshipType
 
 Base = declarative_base()
 
