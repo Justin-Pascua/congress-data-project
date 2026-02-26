@@ -2,6 +2,7 @@ from .api_client import CongressAPIClient
 from .status import ExtractStatus
 from ..config import settings
 from ..exceptions import *
+from ..transform.enums import BillTypes
 
 import pandas as pd
 
@@ -16,8 +17,7 @@ from typing import List, Optional, Literal
 # - after an hour, continue running extraction until failure
 # - continue until all bills have been extracted
 
-# omitted "hjres", "sjres", "hconres", "sconres", "hres", "sres" from valid types because only hr and s can become laws
-VALID_BILL_TYPES = ["hr", "s"]
+VALID_BILL_TYPES = [member.value for member in BillTypes]
 
 client = CongressAPIClient(settings.API_KEY.get_secret_value())
 
@@ -84,21 +84,21 @@ async def read_progress(congress_num: int) -> pd.DataFrame:
     return df
 
 async def update_progress(congress_num: int, updated_progress_df: pd.DataFrame) -> None:
-    
-    full_df = await read_progress(congress_num)
-
+    """
+    Updates progress file given a dataframe containing the updated info
+    """
     output_dir = f'./progress/congress-{congress_num}'
     output_filename = 'bill-ids.csv'
     path = os.path.join(output_dir, output_filename)
     
-    full_df[full_df['Status'] == ExtractStatus.UNATTEMPTED.value] = updated_progress_df
+    updated_progress_df.to_csv(path, index = False)
 
-    full_df.to_csv(path, index = False)
-
-async def batch_extract_bill_info(congress_num: int, unattempted_bills: pd.DataFrame, limit: int = 250) -> dict:
-
-    bills_detailed = {type: dict() for type in VALID_BILL_TYPES}
-    bill_cosponsors = {type: dict() for type in VALID_BILL_TYPES}
+async def batch_extract_bill_info(congress_num: int, progress_df: pd.DataFrame, 
+                                  limit: int = 250, log_porgress: bool = True) -> list:
+    
+    result = []
+    
+    unattempted_bills = progress_df[progress_df['Status'] == ExtractStatus.UNATTEMPTED.value]
 
     for i, row_num in enumerate(unattempted_bills.index):
         if i >= limit:
@@ -108,18 +108,24 @@ async def batch_extract_bill_info(congress_num: int, unattempted_bills: pd.DataF
         bill_type, bill_num = row[['Bill Type', 'Bill Number']]
         
         try:
-            bill_info = await client.get_bill_info(congress_num, bill_type, bill_num)
-            bills_detailed[bill_type][bill_num] = bill_info
-            
+            bill_info = await client.get_bill_info(congress_num, bill_type, bill_num)            
+            # bill_summary = await client.get_bill_summary(congress_num, bill_type, bill_num)
             cosponsors = await client.get_bill_cosponsors(congress_num, bill_type, bill_num)
-            bill_cosponsors[bill_type][bill_num] = cosponsors
 
             unattempted_bills.at[row_num, "Status"] = ExtractStatus.EXTRACTED.value
+            current_item = {'bill': bill_info,
+                            # 'summary': bill_summary,
+                            'cosponsors': cosponsors}
+            result.append(current_item)
         except RateLimitError as e:
             print(e)
             break
-    
-    await update_progress(congress_num, unattempted_bills)
+        except:
+            unattempted_bills.at[row_num, "Status"] = ExtractStatus.FAILED.value
 
-    return {'bills': bills_detailed,
-            'cosponsors': bill_cosponsors}
+    
+    if log_porgress:
+        progress_df[progress_df['Status'] == ExtractStatus.UNATTEMPTED.value] = unattempted_bills
+        await update_progress(congress_num, progress_df)
+
+    return result

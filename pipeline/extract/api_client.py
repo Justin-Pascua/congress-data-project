@@ -4,7 +4,6 @@ from typing import Literal, Optional, List
 
 from ..exceptions import *
 
-
 BASE_URL = 'https://api.congress.gov/v3'
 RATE_THRESHOLD = 100
 NUM_RETRIES = 5
@@ -18,12 +17,14 @@ class CongressAPIClient:
         }
         
         self.client = httpx.AsyncClient(
+            http2 = True,
             base_url = BASE_URL,
             params = base_params, 
             follow_redirects = True, 
-            timeout = 30,
-            limits = httpx.Limits(max_connections = 10,
-                                  max_keepalive_connections = 5))
+            timeout = 15,
+            limits = httpx.Limits(max_connections = 40,
+                                  max_keepalive_connections = 20,
+                                  keepalive_expiry = 60))
         
         response = httpx.get(BASE_URL + '/congress/current', params = base_params)
         self.remaining_calls = int(response.headers['x-ratelimit-remaining'])
@@ -187,17 +188,20 @@ class CongressAPIClient:
         try:
             summary = data['summaries'][-1]['text']
             result['summary'] = summary
-        except:
-            text_response = await self._request_with_retry('get', f'/bill/{congress_num}/{bill_type}/{bill_num}/text')
-            text_data = text_response.json()
-            
-            formats = text_data['textVersions'][-1]['formats']
-            for format in formats:
-                if format['type'] == 'Formatted Text':
-                    html_content = await self.client.get(format['url'])
-                    result['summary'] = html_content.text
-                    break
+        except (KeyError, IndexError):
+            try:
+                text_response = await self._request_with_retry('get', f'/bill/{congress_num}/{bill_type}/{bill_num}/text')
+                text_data = text_response.json()
                 
+                formats = text_data['textVersions'][-1]['formats']
+                for format in formats:
+                    if format['type'] == 'Formatted Text':
+                        html_content = await self.client.get(format['url'])
+                        result['summary'] = html_content.text
+                        break
+            except:
+                pass 
+   
         return result
     
     async def get_bill_info(self, congress_num: int, bill_type: str, bill_num: int) -> dict:
