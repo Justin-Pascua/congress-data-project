@@ -1,12 +1,12 @@
 import pydantic
 from pydantic import BaseModel
 from typing import List, Optional
-from .enums import Chamber, BillType
+from .enums import Chamber, BillType, SponsorshipType
 
-class RepresentativeClean(BaseModel):
+class MemberClean(BaseModel):
     bio_guide_id: str
     name: str
-    party: Optional[str]
+    party: str | None = None
     state: str
     district: int | str | None = None
     chamber: Chamber
@@ -21,7 +21,7 @@ class BillClean(BaseModel):
     policy_area: Optional[str] = None
     summary: Optional[str] = None
 
-class BillMembershipClean(BaseModel):
+class BillSponsorshipClean(BaseModel):
     # identifier for representative
     bio_guide_id: str
 
@@ -29,3 +29,5 @@ class BillMembershipClean(BaseModel):
     congress_num: int
     bill_type: BillType
     bill_num: int
+
+    sponsorship_type: SponsorshipType

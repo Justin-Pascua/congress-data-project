@@ -17,11 +17,11 @@ from typing import List, Optional, Literal
 # - after an hour, continue running extraction until failure
 # - continue until all bills have been extracted
 
-VALID_BILL_TYPES = [member.value for member in BillType]
+VALID_BILL_TYPES = [item.value for item in BillType]
 
 client = CongressAPIClient(settings.API_KEY.get_secret_value())
 
-async def extract_reps(congress_num: int) -> list:
+async def extract_members(congress_num: int) -> list:
     """
     Returns list of representatives in specified congress
     Args:

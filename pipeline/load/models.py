@@ -7,8 +7,8 @@ from ..transform.enums import Chamber, SponsorshipType
 
 Base = declarative_base()
 
-class Representative(Base):
-    __tablename__ = "representatives"
+class Member(Base):
+    __tablename__ = "members"
 
     bio_guide_id: Mapped[str] = mapped_column(primary_key = True)
     name: Mapped[str] = mapped_column(String(64), nullable = False)
@@ -35,10 +35,10 @@ class Bill(Base):
         UniqueConstraint("congress", "type", "number"),
     )
 
-class BillMembers(Base):
-    __tablename__ = "bill_members"
+class BillSponsorship(Base):
+    __tablename__ = "bill_involvement"
 
-    representative_id: Mapped[str] = mapped_column(ForeignKey("represenatives.bio_guide_id"), primary_key = True)
+    representative_id: Mapped[str] = mapped_column(ForeignKey("members.bio_guide_id"), primary_key = True)
     bill_id: Mapped[int] = mapped_column(ForeignKey("bills.id"), primary_key = True)
     role: Mapped[SponsorshipType] = mapped_column(Enum(SponsorshipType), nullable = False)
 
