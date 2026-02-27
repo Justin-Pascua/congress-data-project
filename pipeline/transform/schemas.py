@@ -8,7 +8,7 @@ class MemberClean(BaseModel):
     name: str
     party: str | None = None
     state: str
-    district: int | str | None = None
+    district: int | None = None
     chamber: Chamber
 
 class BillClean(BaseModel):
