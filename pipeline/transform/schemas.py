@@ -1,6 +1,7 @@
 import pydantic
 from pydantic import BaseModel
 from typing import List, Optional
+
 from .enums import Chamber, BillType, SponsorshipType
 
 class MemberClean(BaseModel):
