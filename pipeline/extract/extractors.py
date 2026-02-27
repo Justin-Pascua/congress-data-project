@@ -18,6 +18,8 @@ from ..transform.enums import BillType
 # - after an hour, continue running extraction until failure
 # - continue until all bills have been extracted
 
+logger = logging.getLogger("pipeline.extract")
+
 VALID_BILL_TYPES = [item.value for item in BillType]
 
 async def extract_members(client: CongressAPIClient, congress_num: int) -> list:
@@ -29,7 +31,7 @@ async def extract_members(client: CongressAPIClient, congress_num: int) -> list:
     """
     # get all reps
     members = await client.get_all_members(congress_num)
-    logging.info(f"Extracted {len(members)} members")
+    logger.info(f"Extracted {len(members)} members")
     return members
 
 async def get_bill_ids(client: CongressAPIClient, congress_num: int = None) -> List[tuple]:
@@ -48,7 +50,7 @@ async def get_bill_ids(client: CongressAPIClient, congress_num: int = None) -> L
         bills_of_type = await client.get_all_bills(congress_num, bill_type)
         current_bill_ids = [(bill_type, bill['number']) for bill in bills_of_type]
         bill_ids.extend(current_bill_ids)
-    logging.info(f"Identified {len(bill_ids)} bills in congress {congress_num}")
+    logger.info(f"Identified {len(bill_ids)} bills in congress {congress_num}")
 
     return bill_ids
 
@@ -72,7 +74,7 @@ async def initialize_progress(congress_num: int, bill_ids = List[tuple]) -> None
         os.makedirs(output_dir)
 
     df.to_csv(full_file_path, index = False)
-    logging.info(f"Initialized bill extraction. File path: {full_file_path}")
+    logger.info(f"Initialized bill extraction. File path: {full_file_path}")
 
 async def read_progress(congress_num: int) -> pd.DataFrame:
     """
@@ -116,7 +118,7 @@ async def batch_extract_bill_info(client: CongressAPIClient, congress_num: int, 
         save_progress: a bool specifiyng whether or not to call `update_progress` to update the progress file. 
         If `True`, then `update_progress` is called. Otherwise, `update_progress` is not called.
     """
-    logging.info(f"Starting batch extraction for congress {congress_num}")
+    logger.info(f"Starting batch extraction for congress {congress_num}")
     
     # compute initial state of progress
     total_bills = len(progress_df)
@@ -124,7 +126,7 @@ async def batch_extract_bill_info(client: CongressAPIClient, congress_num: int, 
     failed_count = len(progress_df[progress_df['Status'] == ExtractStatus.FAILED.value])
     unattempted_count = len(progress_df[progress_df['Status'] == ExtractStatus.UNATTEMPTED.value])
 
-    logging.info(f"Initial state - Total: {total_bills}, "
+    logger.info(f"Initial state - Total: {total_bills}, "
                  f"Extracted: {extracted_count}, "
                  f"Failed: {failed_count}, "
                  f"Remaining: {unattempted_count}")
@@ -134,10 +136,10 @@ async def batch_extract_bill_info(client: CongressAPIClient, congress_num: int, 
 
     for i, row_num in enumerate(unattempted_bills.index):
         if i >= limit:
-            logging.info(f"Batch limit of {limit} reached. Stopping.")
+            logger.info(f"Batch limit of {limit} reached. Stopping.")
             break
         if (i+1) % 10 == 0:
-            logging.info(f"Batch extract progress: {i+1} attempted")
+            logger.info(f"Batch extract progress: {i+1} attempted")
 
         row = unattempted_bills.iloc[row_num]
         bill_type, bill_num = row[['Bill Type', 'Bill Number']]
@@ -153,10 +155,10 @@ async def batch_extract_bill_info(client: CongressAPIClient, congress_num: int, 
                             'cosponsors': cosponsors}
             result.append(current_item)
         except RateLimitError as e:
-            logging.warning(f"{str(e)}")
+            logger.warning(f"{str(e)}")
             break
         except:
-            logging.warning(f"Extract failed for bill {congress_num, bill_type, bill_num}")
+            logger.warning(f"Extract failed for bill {congress_num, bill_type, bill_num}")
             unattempted_bills.at[row_num, "Status"] = ExtractStatus.FAILED.value
 
     # update progress df
@@ -168,7 +170,7 @@ async def batch_extract_bill_info(client: CongressAPIClient, congress_num: int, 
     failed_count = len(progress_df[progress_df['Status'] == ExtractStatus.FAILED.value])
     unattempted_count = len(progress_df[progress_df['Status'] == ExtractStatus.UNATTEMPTED.value])
 
-    logging.info(f"Final state - Total: {total_bills}, "
+    logger.info(f"Final state - Total: {total_bills}, "
                  f"Extracted: {extracted_count}, "
                  f"Failed: {failed_count}, "
                  f"Remaining: {unattempted_count}")

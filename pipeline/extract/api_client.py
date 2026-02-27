@@ -9,6 +9,8 @@ BASE_URL = 'https://api.congress.gov/v3'
 RATE_THRESHOLD = 100
 NUM_RETRIES = 5
 
+logger = logging.getLogger("pipeline.extract")
+
 class CongressAPIClient:
     def __init__(self, api_key: str):
         base_params = {
@@ -27,7 +29,7 @@ class CongressAPIClient:
         
         response = httpx.get(BASE_URL + '/congress/current', params = base_params, timeout = 15)
         self.remaining_calls = int(response.headers['x-ratelimit-remaining'])
-        logging.info("CongressAPIClient instantiated")
+        logger.info("CongressAPIClient instantiated")
 
     def _check_exceptions(self, response: httpx.Response) -> None:
         """
