@@ -4,8 +4,6 @@ import httpx
 from typing import List, Optional, Literal
 
 class Settings(BaseSettings):
-    API_KEY: SecretStr
-
     DB_USER: SecretStr
     DB_PASSWORD: SecretStr
     DB_HOST: SecretStr

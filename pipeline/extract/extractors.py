@@ -1,6 +1,5 @@
 from .api_client import CongressAPIClient
 from .status import ExtractStatus
-from ..config import settings
 from ..exceptions import *
 from ..transform.enums import BillType
 
@@ -19,22 +18,22 @@ from typing import List, Optional, Literal
 
 VALID_BILL_TYPES = [item.value for item in BillType]
 
-client = CongressAPIClient(settings.API_KEY.get_secret_value())
-
-async def extract_members(congress_num: int) -> list:
+async def extract_members(client: CongressAPIClient, congress_num: int) -> list:
     """
     Returns list of representatives in specified congress
     Args:
+        client: a `CongressAPIClient` instance used to make requests to the API
         congress_num: the number of the congress (e.g. 119)
     """
     # get all reps
     representatives = await client.get_all_members(congress_num)
     return representatives
 
-async def get_bill_ids(congress_num: int = None) -> List[tuple]:
+async def get_bill_ids(client: CongressAPIClient, congress_num: int = None) -> List[tuple]:
     """
     Returns a list of bill identifiers, whose elements are tuples of the form (`bill_type`, `bill_num`)
     Args:
+        client: a `CongressAPIClient` instance used to make requests to the API
         congress_num: the number of the congress (e.g. 119)
     """
     if congress_num is None:
@@ -96,12 +95,13 @@ async def update_progress(congress_num: int, updated_progress_df: pd.DataFrame) 
     
     updated_progress_df.to_csv(path, index = False)
 
-async def batch_extract_bill_info(congress_num: int, progress_df: pd.DataFrame, 
+async def batch_extract_bill_info(client: CongressAPIClient, congress_num: int, progress_df: pd.DataFrame, 
                                   limit: int = 250, log_progress: bool = True) -> list:
     """
     Returns list of bill info in a specified congress using bill identifiers specified by `progress_df`. 
     Note that extraction will stop if the API rate limit is reached.
     Args:
+        client: a `CongressAPIClient` instance used to make requests to the API
         congress_num: the number of the congress (e.g. 119)
         progress_df: a `pd.DataFrame` as outputted by the `read_progress` function
         limit: the max number of bills to extract
