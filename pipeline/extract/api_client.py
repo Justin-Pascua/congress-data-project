@@ -1,6 +1,7 @@
 import httpx
 import asyncio
 from typing import Literal, Optional, List
+import logging
 
 from ..exceptions import *
 
@@ -26,6 +27,7 @@ class CongressAPIClient:
         
         response = httpx.get(BASE_URL + '/congress/current', params = base_params, timeout = 15)
         self.remaining_calls = int(response.headers['x-ratelimit-remaining'])
+        logging.info("CongressAPIClient instantiated")
 
     def _check_exceptions(self, response: httpx.Response) -> None:
         """
