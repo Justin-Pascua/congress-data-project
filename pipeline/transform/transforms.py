@@ -1,5 +1,4 @@
 from typing import List
-from datetime import datetime
 
 from .schemas import MemberClean, BillClean, BillSponsorshipClean
 from ..load import models
