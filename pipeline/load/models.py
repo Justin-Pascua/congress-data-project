@@ -12,6 +12,7 @@ Base = declarative_base()
 class Member(Base):
     __tablename__ = "members"
 
+    congress_num: Mapped[int] = mapped_column(Integer, primary_key = True)
     bio_guide_id: Mapped[str] = mapped_column(String(16), primary_key = True)
     name: Mapped[str] = mapped_column(String(64))
     party: Mapped[str] = mapped_column(String(16), nullable = True)
@@ -80,8 +81,8 @@ class Bill(Base):
 class BillSponsorship(Base):
     __tablename__ = "bill_sponsorship"
 
-    bio_guide_id: Mapped[str] = mapped_column(ForeignKey("members.bio_guide_id", ondelete = "CASCADE"), primary_key = True)
-    
+
+    bio_guide_id: Mapped[str] = mapped_column(String(16), primary_key = True)    
     congress_num: Mapped[int] = mapped_column(Integer, primary_key = True)
     bill_type: Mapped[BillType] = mapped_column(Enum(BillType), primary_key = True)
     bill_num: Mapped[int] = mapped_column(Integer, primary_key = True)
@@ -91,6 +92,11 @@ class BillSponsorship(Base):
     last_refresh: Mapped[datetime] = mapped_column(DateTime, default = lambda: datetime.now())
 
     __table_args__ = (
+        ForeignKeyConstraint(
+            ['congress_num', 'bio_guide_id'],
+            ['members.congress_num', 'members.bio_guide_id'],
+            ondelete = "CASCADE"
+        ),
         ForeignKeyConstraint(
             ['congress_num', 'bill_type', 'bill_num'],
             ['bills.congress_num', 'bills.bill_type', 'bills.bill_num'],

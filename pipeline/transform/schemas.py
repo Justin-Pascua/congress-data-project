@@ -5,6 +5,7 @@ from typing import List, Optional
 from .enums import Chamber, BillType, SponsorshipType
 
 class MemberClean(BaseModel):
+    congress_num: int
     bio_guide_id: str
     name: str
     party: str | None = None

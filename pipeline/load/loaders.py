@@ -22,7 +22,7 @@ def upsert_members(clean_members: List[MemberClean]) -> None:
         member_dicts = [member.model_dump() for member in clean_members]
         stmt = insert(Member).values(member_dicts)
         stmt = stmt.on_conflict_do_update(
-            index_elements = ['bio_guide_id'],
+            index_elements = ['congress_num', 'bio_guide_id'],
             set_ = {
                 'name': stmt.excluded.name,
                 'chamber': stmt.excluded.chamber,

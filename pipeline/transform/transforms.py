@@ -17,7 +17,7 @@ def nested_get(input_dict: dict, *args):
     except:
         return None
 
-def transform_members(raw_members: List[dict]) -> List[MemberClean]:
+def transform_members(congress_num: int, raw_members: List[dict]) -> List[MemberClean]:
     """
     Applies transformations to list of dicts representing members.
     Args:
@@ -32,6 +32,7 @@ def transform_members(raw_members: List[dict]) -> List[MemberClean]:
     for raw_member in raw_members:
         try:
             clean_rep = MemberClean(
+                congress_num = congress_num,
                 bio_guide_id = raw_member['bioguideId'],
                 name = raw_member['name'],
                 party = raw_member['partyName'],

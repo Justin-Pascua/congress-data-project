@@ -41,6 +41,7 @@ async def get_bill_ids(client: CongressAPIClient, congress_num: int = None) -> L
         client: a `CongressAPIClient` instance used to make requests to the API
         congress_num: the number of the congress (e.g. 119)
     """
+    logger.info(f"Fetching bill ids for congress {congress_num}")
     if congress_num is None:
         current_details = await client.get_current_congress()
         congress_num = current_details['congress_num']
