@@ -31,7 +31,7 @@ async def extract_members(client: CongressAPIClient, congress_num: int) -> list:
     """
     # get all reps
     members = await client.get_all_members(congress_num)
-    logger.info(f"Extracted {len(members)} members")
+    logger.info(f"Extracted {len(members)} members in congress {congress_num}")
     return members
 
 async def get_bill_ids(client: CongressAPIClient, congress_num: int = None) -> List[tuple]:
@@ -138,7 +138,7 @@ async def batch_extract_bill_info(client: CongressAPIClient, congress_num: int, 
         if i >= limit:
             logger.info(f"Batch limit of {limit} reached. Stopping.")
             break
-        if (i+1) % 10 == 0:
+        if (i+1) % 25 == 0:
             logger.info(f"Batch extract progress: {i+1} attempted")
 
         row = unattempted_bills.iloc[row_num]

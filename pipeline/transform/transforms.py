@@ -1,7 +1,9 @@
 from typing import List
+import logging
 
 from .schemas import MemberClean, BillClean, BillSponsorshipClean
-from ..load import models
+
+logger = logging.getLogger('pipeline.transform')
 
 def nested_get(input_dict: dict, *args):
     """
@@ -15,24 +17,34 @@ def nested_get(input_dict: dict, *args):
     except:
         return None
 
-
 def transform_members(raw_members: List[dict]) -> List[MemberClean]:
     """
     Applies transformations to list of dicts representing members.
     Args:
         raw_members: a list of dicts representing members as returned by `pipeline.extract.extract_members`
     """
+    
+    logger.info(f"Starting member transformation: {len(raw_members)} raw records")
+    
     result = []
-    for raw_members in raw_members:
-        clean_rep = MemberClean(
-            bio_guide_id = raw_members['bioguideId'],
-            name = raw_members['name'],
-            party = raw_members['partyName'],
-            state = raw_members['state'],
-            district = raw_members['district'],
-            chamber = raw_members['terms']['item'][0]['chamber']
-        )
-        result.append(clean_rep)
+    failures = 0
+
+    for raw_member in raw_members:
+        try:
+            clean_rep = MemberClean(
+                bio_guide_id = raw_member['bioguideId'],
+                name = raw_member['name'],
+                party = raw_member['partyName'],
+                state = raw_member['state'],
+                district = raw_member['district'],
+                chamber = raw_member['terms']['item'][0]['chamber']
+            )
+            result.append(clean_rep)
+        except Exception as e:
+            failures += 1
+            logger.warning(f"Member transformation failed. ID: {raw_member['bioguideId']} | Error: {e}")
+
+    logger.info(f"Completed member transformation: {len(result)} cleaned, {failures} failures")
 
     return result
 
@@ -42,51 +54,79 @@ def transform_bills(raw_bills: List[dict]) -> List[BillClean]:
     Args:
         raw_bills: a list of bills as returned by `pipeline.extract.batch_extract_bill_info`
     """
+    
+    logger.info(f"Starting bill transformation: {len(raw_bills)} raw records")
+    
     result = []
-    for raw_bill in raw_bills:
+    failures = 0
 
-        clean_bill = BillClean(
-            congress_num = raw_bill['bill']['congress'],
-            bill_type = raw_bill['bill']['type'],
-            bill_num = raw_bill['bill']['number'],
-            
-            title = raw_bill['bill']['title'],
-            chamber = raw_bill['bill']['originChamber'],
-            # only using nested get here because only these two fields are nullable
-            policy_area = nested_get(raw_bill, 'bill', 'policyArea', 'name'),   
-            summary = nested_get(raw_bill, 'summary', 'summary')
-        )
-        result.append(clean_bill)
+    for raw_bill in raw_bills:
+        try:
+            clean_bill = BillClean(
+                congress_num = raw_bill['bill']['congress'],
+                bill_type = raw_bill['bill']['type'],
+                bill_num = raw_bill['bill']['number'],
+                
+                title = raw_bill['bill']['title'],
+                chamber = raw_bill['bill']['originChamber'],
+                # only using nested get here because only these two fields are nullable
+                policy_area = nested_get(raw_bill, 'bill', 'policyArea', 'name'),   
+                summary = nested_get(raw_bill, 'summary', 'summary')
+            )
+            result.append(clean_bill)
+        except Exception as e:
+            failures += 1
+            logger.warning(f"Bill transformation failed. ID: {raw_bill['bill']['congress'], raw_bill['bill']['type'], raw_bill['bill']['number']}"
+                           f" | Error: {e}")
+
+    
+    logger.info(f"Completed bill transformation: {len(result)} cleaned, {failures} failures")
     
     return result
 
-def transform_bill_sponsorship(raw_bills: List[dict]) -> List[BillSponsorshipClean]:
+def transform_bill_sponsorships(raw_bills: List[dict]) -> List[BillSponsorshipClean]:
     """
     Applies transformations to list of dicts representing bills to extract sponsorship details.
     Args:
         raw_bills: a list of bills as returned by `pipeline.extract.batch_extract_bill_info`
     """
+
+    logger.info(f"Starting sponsorship transformation: {len(raw_bills)} raw records")
+    
     result = []
+    failures = 0
     
     for raw_bill in raw_bills:
         for member in raw_bill['bill']['sponsors']:
-            membership = BillSponsorshipClean(
-                bio_guide_id = member['bioguideId'],
-                congress_num = raw_bill['bill']['congress'],
-                bill_type = raw_bill['bill']['type'],
-                bill_num = raw_bill['bill']['number'],
-                sponsorship_type = 'sponsor'
-            )
-            result.append(membership)
+            try:
+                membership = BillSponsorshipClean(
+                    bio_guide_id = member['bioguideId'],
+                    congress_num = raw_bill['bill']['congress'],
+                    bill_type = raw_bill['bill']['type'],
+                    bill_num = raw_bill['bill']['number'],
+                    sponsorship_type = 'sponsor'
+                )
+                result.append(membership)
+            except Exception as e:
+                failures += 1
+                logger.warning(f"Sponsorship transformation failed. ID: {raw_bill['bill']['congress'], raw_bill['bill']['type'], raw_bill['bill']['number']}"
+                               f" | Error: {e}")
 
         for member in raw_bill['cosponsors']:
-            membership = BillSponsorshipClean(
-                bio_guide_id = member['bioguideId'],
-                congress_num = raw_bill['bill']['congress'],
-                bill_type = raw_bill['bill']['type'],
-                bill_num = raw_bill['bill']['number'],
-                sponsorship_type = 'cosponsor'
-            )
-            result.append(membership)
+            try:
+                membership = BillSponsorshipClean(
+                    bio_guide_id = member['bioguideId'],
+                    congress_num = raw_bill['bill']['congress'],
+                    bill_type = raw_bill['bill']['type'],
+                    bill_num = raw_bill['bill']['number'],
+                    sponsorship_type = 'cosponsor'
+                )
+                result.append(membership)
+            except Exception as e:
+                failures += 1
+                logger.warning(f"Sponsorship transformation failed. ID: {raw_bill['bill']['congress'], raw_bill['bill']['type'], raw_bill['bill']['number']}"
+                               f" | Error: {e}")
     
+    logger.info(f"Completed sponsorship transformation: {len(result)} cleaned, {failures} failures")
+
     return result
