@@ -1,6 +1,6 @@
 from typing import List, Optional
 from datetime import datetime
-from sqlalchemy import (String, Integer, DateTime, Enum, Text,
+from sqlalchemy import (String, Integer, DateTime, Enum, Text, Boolean,
                         UniqueConstraint, ForeignKey, ForeignKeyConstraint)
 from sqlalchemy.orm import Mapped, mapped_column, relationship, declarative_base
 from ..transform.enums import Chamber, SponsorshipType, BillType
@@ -80,18 +80,21 @@ class Bill(Base):
 class BillSponsorship(Base):
     __tablename__ = "bill_sponsorship"
 
-    bio_guide_id: Mapped[str] = mapped_column(ForeignKey("members.bio_guide_id"), primary_key = True)
+    bio_guide_id: Mapped[str] = mapped_column(ForeignKey("members.bio_guide_id", ondelete = "CASCADE"), primary_key = True)
     
     congress_num: Mapped[int] = mapped_column(Integer, primary_key = True)
     bill_type: Mapped[BillType] = mapped_column(Enum(BillType), primary_key = True)
     bill_num: Mapped[int] = mapped_column(Integer, primary_key = True)
     
     sponsorship_type: Mapped[SponsorshipType] = mapped_column(Enum(SponsorshipType), nullable = False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default = True)
+    last_refresh: Mapped[datetime] = mapped_column(DateTime, default = lambda: datetime.now())
 
     __table_args__ = (
         ForeignKeyConstraint(
             ['congress_num', 'bill_type', 'bill_num'],
-            ['bills.congress_num', 'bills.bill_type', 'bills.bill_num']
+            ['bills.congress_num', 'bills.bill_type', 'bills.bill_num'],
+            ondelete = "CASCADE"
         ),
     )
 
