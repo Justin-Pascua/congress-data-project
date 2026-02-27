@@ -24,7 +24,7 @@ class CongressAPIClient:
             limits = httpx.Limits(max_connections = 10,
                                   max_keepalive_connections = 5))
         
-        response = httpx.get(BASE_URL + '/congress/current', params = base_params)
+        response = httpx.get(BASE_URL + '/congress/current', params = base_params, timeout = 15)
         self.remaining_calls = int(response.headers['x-ratelimit-remaining'])
 
     def _check_exceptions(self, response: httpx.Response) -> None:
