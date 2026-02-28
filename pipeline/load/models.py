@@ -1,6 +1,6 @@
 from typing import List, Optional
 from datetime import datetime
-from sqlalchemy import (String, Integer, DateTime, Enum, Text, Boolean,
+from sqlalchemy import (String, Integer, Date, DateTime, Enum, Text, Boolean,
                         UniqueConstraint, ForeignKey, ForeignKeyConstraint)
 from sqlalchemy.orm import Mapped, mapped_column, relationship, declarative_base
 from ..transform.enums import Chamber, SponsorshipType, BillType
@@ -50,6 +50,7 @@ class Bill(Base):
     bill_type: Mapped[BillType] = mapped_column(Enum(BillType), primary_key = True)
     bill_num: Mapped[int] = mapped_column(Integer, primary_key = True)
 
+    introduced_date: Mapped[datetime] = mapped_column(Date)
     title: Mapped[str] = mapped_column(Text)    
     chamber: Mapped[Chamber] = mapped_column(Enum(Chamber))
     policy_area: Mapped[str] = mapped_column(String(64), nullable = True)

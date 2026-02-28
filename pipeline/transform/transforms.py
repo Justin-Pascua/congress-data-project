@@ -1,5 +1,6 @@
 from typing import List
 import logging
+from datetime import datetime
 
 from .schemas import MemberClean, BillClean, BillSponsorshipClean
 
@@ -67,7 +68,8 @@ def transform_bills(raw_bills: List[dict]) -> List[BillClean]:
                 congress_num = raw_bill['bill']['congress'],
                 bill_type = raw_bill['bill']['type'],
                 bill_num = raw_bill['bill']['number'],
-                
+
+                introduced_date = datetime.strptime(raw_bill['bill']['introducedDate'],"%Y-%m-%d"),
                 title = raw_bill['bill']['title'],
                 chamber = raw_bill['bill']['originChamber'],
                 # only using nested get here because only these two fields are nullable

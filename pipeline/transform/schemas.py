@@ -1,6 +1,7 @@
 import pydantic
 from pydantic import BaseModel
 from typing import List, Optional
+from datetime import datetime
 
 from .enums import Chamber, BillType, SponsorshipType
 
@@ -17,6 +18,7 @@ class BillClean(BaseModel):
     congress_num: int
     bill_type: BillType
     bill_num: int
+    introduced_date: datetime
 
     title: str
     chamber: Chamber

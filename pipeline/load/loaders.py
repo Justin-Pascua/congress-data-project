@@ -44,7 +44,6 @@ def upsert_members(clean_members: List[MemberClean]) -> None:
 
     logger.info(f"Completed member upsert: {inserted} inserted, {updated} updated")
     
-
 def upsert_bills(clean_bills: List[BillClean]) -> None:
     """
     Upsert bill info into db.
@@ -59,6 +58,7 @@ def upsert_bills(clean_bills: List[BillClean]) -> None:
         stmt = stmt.on_conflict_do_update(
             index_elements = ['congress_num', 'bill_type', 'bill_num'],
             set_ = {
+                'introduced_date': stmt.excluded.introduced_date,
                 'title': stmt.excluded.title,
                 'policy_area': stmt.excluded.policy_area,
                 'summary': stmt.excluded.summary
