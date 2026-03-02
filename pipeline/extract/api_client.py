@@ -13,23 +13,41 @@ logger = logging.getLogger("pipeline.extract")
 
 class CongressAPIClient:
     def __init__(self, api_key: str):
+        self.api_key = api_key
+        self.client = None  # Initialize lazily
+        self._rate_limit_lock = asyncio.Lock()
+        self.remaining_calls = None
+        logger.info("CongressAPIClient instantiated")
+
+    async def _ensure_client(self):  
+        if self.client is not None:
+            return 
+         
         base_params = {
-            'api_key': api_key,
+            'api_key': self.api_key,
             'format': 'json',
             'limit': 250
-        }
-        
+        }  
         self.client = httpx.AsyncClient(
+            http2 = True,
             base_url = BASE_URL,
             params = base_params, 
             follow_redirects = True, 
             timeout = 15,
-            limits = httpx.Limits(max_connections = 10,
-                                  max_keepalive_connections = 5))
+            limits = httpx.Limits(
+                    max_keepalive_connections=20,
+                    max_connections=50,
+                    keepalive_expiry=60.0
+                )
+            )
         
-        response = httpx.get(BASE_URL + '/congress/current', params = base_params, timeout = 15)
+        response = await self.client.get('/congress/current')
         self.remaining_calls = int(response.headers['x-ratelimit-remaining'])
-        logger.info("CongressAPIClient instantiated")
+
+    async def close(self):
+        if self.client:
+            await self.client.aclose()
+            self.client = None
 
     def _check_exceptions(self, response: httpx.Response) -> None:
         """
@@ -69,6 +87,9 @@ class CongressAPIClient:
             method: A string specifying the HTTP method, usually "get"
             url: The url of the endpoint to be called
         """
+
+        await self._ensure_client()
+        
         # exponential backoff retry
         base_delay = 0.5
 

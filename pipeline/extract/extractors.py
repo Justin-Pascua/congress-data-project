@@ -119,6 +119,8 @@ async def batch_extract_bill_info(client: CongressAPIClient, congress_num: int, 
         save_progress: a bool specifiyng whether or not to call `update_progress` to update the progress file. 
         If `True`, then `update_progress` is called. Otherwise, `update_progress` is not called.
     """
+
+    start_time = time.perf_counter()
     logger.info(f"Starting batch extraction for congress {congress_num}")
     
     # compute initial state of progress
@@ -171,12 +173,14 @@ async def batch_extract_bill_info(client: CongressAPIClient, congress_num: int, 
     failed_count = len(progress_df[progress_df['Status'] == ExtractStatus.FAILED.value])
     unattempted_count = len(progress_df[progress_df['Status'] == ExtractStatus.UNATTEMPTED.value])
 
+    end_time = time.perf_counter()
+    
     logger.info(f"Final state - Total: {total_bills}, "
                  f"Extracted: {extracted_count}, "
                  f"Failed: {failed_count}, "
-                 f"Remaining: {unattempted_count}")
+                 f"Remaining: {unattempted_count}, "
+                 f"Execution time: {end_time - start_time:.2f}")
     
-
     if save_progress:
         await update_progress(congress_num, progress_df)
 
