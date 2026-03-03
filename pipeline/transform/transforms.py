@@ -96,40 +96,49 @@ def transform_bill_sponsorships(raw_bills: List[dict]) -> List[BillSponsorshipCl
 
     logger.info(f"Starting sponsorship transformation: {len(raw_bills)} raw records")
     
+    seen = set()
     result = []
-    failures = 0
+    duplicates = 0
     
     for raw_bill in raw_bills:
-        for member in raw_bill['bill']['sponsors']:
-            try:
-                membership = BillSponsorshipClean(
+        congress_num = raw_bill['bill']['congress']
+        bill_type = raw_bill['bill']['type']
+        bill_num = raw_bill['bill']['number']
+
+        for member in raw_bill['bill'].get('sponsors', []):
+            key = (member['bioguideId'], congress_num, bill_type, bill_num, 'sponsor')
+            if key not in seen:
+                seen.add(key)
+                result.append(BillSponsorshipClean(
                     bio_guide_id = member['bioguideId'],
-                    congress_num = raw_bill['bill']['congress'],
-                    bill_type = raw_bill['bill']['type'],
-                    bill_num = raw_bill['bill']['number'],
+                    congress_num = congress_num,
+                    bill_type = bill_type,
+                    bill_num = bill_num,
                     sponsorship_type = 'sponsor'
-                )
-                result.append(membership)
-            except Exception as e:
-                failures += 1
-                logger.warning(f"Sponsorship transformation failed. ID: {raw_bill['bill']['congress'], raw_bill['bill']['type'], raw_bill['bill']['number']}"
-                               f" | Error: {e}")
+                ))
+            else:
+                duplicates += 1
+                logger.warning(f"Duplicate sponsor: {key}")
 
         for member in raw_bill['cosponsors']:
-            try:
-                membership = BillSponsorshipClean(
+            # members who've withdrawn cosponsorship have a "sponsorshipWithdrawnDate" field
+            if 'sponsorshipWithdrawnDate' in member:
+                continue
+            
+            key = (member['bioguideId'], congress_num, bill_type, bill_num, 'cosponsor')
+            if key not in seen:
+                seen.add(key)
+                result.append(BillSponsorshipClean(
                     bio_guide_id = member['bioguideId'],
-                    congress_num = raw_bill['bill']['congress'],
-                    bill_type = raw_bill['bill']['type'],
-                    bill_num = raw_bill['bill']['number'],
+                    congress_num = congress_num,
+                    bill_type = bill_type,
+                    bill_num = bill_num,
                     sponsorship_type = 'cosponsor'
-                )
-                result.append(membership)
-            except Exception as e:
-                failures += 1
-                logger.warning(f"Sponsorship transformation failed. ID: {raw_bill['bill']['congress'], raw_bill['bill']['type'], raw_bill['bill']['number']}"
-                               f" | Error: {e}")
+                ))
+            else:
+                duplicates += 1
+                logger.warning(f"Duplicate cosponsor: {key}")
     
-    logger.info(f"Completed sponsorship transformation: {len(result)} cleaned, {failures} failures")
+    logger.info(f"Completed sponsorship transformation: {len(result)} distinct, {duplicates} duplicates")
 
     return result
