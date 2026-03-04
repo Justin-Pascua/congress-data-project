@@ -5,7 +5,7 @@
 demo.ipynb
 db_scripts/
 
-progress/
+ledger/
 dummy_data/
 logs/
 foo.py
