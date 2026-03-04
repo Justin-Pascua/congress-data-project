@@ -10,6 +10,8 @@ from .api_client import CongressAPIClient
 from .status import ExtractStatus
 from ..exceptions import *
 from ..transform.enums import BillType
+from ..tracking import utils
+from ..tracking.status import ExtractStatus, TransformStatus, LoadStatus
 
 # idea:
 # - extract layer calls the api to get the bill types and bill numbers for the bills that the user wants to extract
@@ -55,87 +57,55 @@ async def get_bill_ids(client: CongressAPIClient, congress_num: int = None) -> L
 
     return bill_ids
 
-async def initialize_progress(congress_num: int, bill_ids = List[tuple]) -> None:
+async def single_extract_bill_info(client: CongressAPIClient, 
+                                   congress_num: int, bill_type: str, bill_num: int) -> dict:
     """
-    Writes a csv file containing the identifiers for congress bills. Column names are Bill Type, Bill Number, and Status.
-    The file is written to the directory ./progress/congress-`congress_num`
+    Returns the info, summary, and cosponsors of a specified congressional bill.
     Args:
+        client: a `CongressAPIClient` instance used to make requests to the API
         congress_num: the number of the congress (e.g. 119)
-        bill_ids: a list of tuples of the form (`bill type`, `bill number`)
+        bill_type:
+        bill_num:
     """
+    bill_info = await client.get_bill_info(congress_num, bill_type, bill_num)            
+    bill_summary = await client.get_bill_summary(congress_num, bill_type, bill_num)
+    cosponsors = await client.get_bill_cosponsors(congress_num, bill_type, bill_num)
 
-    df = pd.DataFrame(bill_ids, columns = ['Bill Type', 'Bill Number'])
-    df['Status'] = ExtractStatus.UNATTEMPTED.value
-
-    root_dir = Path.cwd()
-    output_dir = root_dir / "progress" / f"congress-{congress_num}"
-    file_name = 'bill-ids.csv'
-    full_file_path = output_dir / file_name
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
-    df.to_csv(full_file_path, index = False)
-    logger.info(f"Initialized bill extraction. File path: {full_file_path}")
-
-async def read_progress(congress_num: int) -> pd.DataFrame:
-    """
-    Reads the progress file containing the bill identifiers, and returns the info in the form of a `pd.DataFrame`. 
-    Note that the progress file must have the path ./progress/congress-`congress_num`/bill-ids.csv
-    Args:
-        congress_num: the number of the congress (e.g. 119)
-    """
-    root_dir = Path.cwd()
-    output_dir = root_dir / "progress" / f"congress-{congress_num}"
-    file_name = 'bill-ids.csv'
-    full_file_path = output_dir / file_name
-
-    df = pd.read_csv(full_file_path)
-    return df
-
-async def update_progress(congress_num: int, updated_progress_df: pd.DataFrame) -> None:
-    """
-    Updates progress file given a dataframe containing the updated info
-    Args:
-        congress_num: the number of the congress (e.g. 119) 
-        update_progress_df: a `pd.DataFrame` containing the updated extraction statuses of the bills
-    """
-    root_dir = Path.cwd()
-    output_dir = root_dir / "progress" / f"congress-{congress_num}"
-    file_name = 'bill-ids.csv'
-    full_file_path = output_dir / file_name
+    result = {'bill': bill_info,
+              'summary': bill_summary,
+              'cosponsors': cosponsors}
     
-    updated_progress_df.to_csv(full_file_path, index = False)
+    return result
 
-async def batch_extract_bill_info(client: CongressAPIClient, congress_num: int, progress_df: pd.DataFrame, 
-                                  limit: int = 250, save_progress: bool = True) -> list:
+async def batch_extract_bill_info(client: CongressAPIClient, congress_num: int, ledger_df: pd.DataFrame, 
+                                  limit: int = 250, update_ledger: bool = True) -> List[dict]:
     """
     Returns list of bill info in a specified congress using bill identifiers specified by `progress_df`. 
     Note that extraction will stop if the API rate limit is reached.
     Args:
         client: a `CongressAPIClient` instance used to make requests to the API
         congress_num: the number of the congress (e.g. 119)
-        progress_df: a `pd.DataFrame` as outputted by the `read_progress` function
+        ledger_df: a `pd.DataFrame` as outputted by the `read_ledger` function
         limit: the max number of bills to extract
-        save_progress: a bool specifiyng whether or not to call `update_progress` to update the progress file. 
-        If `True`, then `update_progress` is called. Otherwise, `update_progress` is not called.
+        update_ledger: a bool specifiyng whether or not to call `update_ledger` to update the progress file. 
+        If `True`, then `update_ledger` is called. Otherwise, `update_ledger` is not called.
     """
 
     start_time = time.perf_counter()
-    logger.info(f"Starting batch extraction for congress {congress_num}")
     
-    # compute initial state of progress
-    total_bills = len(progress_df)
-    extracted_count = len(progress_df[progress_df['Status'] == ExtractStatus.EXTRACTED.value])
-    failed_count = len(progress_df[progress_df['Status'] == ExtractStatus.FAILED.value])
-    unattempted_count = len(progress_df[progress_df['Status'] == ExtractStatus.UNATTEMPTED.value])
+    # log initial state of ledger
+    logger.info(f"Starting batch extraction for congress {congress_num}")
+    current_state = utils.get_status_counts(ledger_df = ledger_df, layer = "Extract")
+    logger.info(f"Initial state - Total: {current_state['total']} | "
+                 f"Unattempted: {current_state['unattempted']} | "
+                 f"Successful: {current_state['successful']} | "
+                 f"Failed: {current_state['failed']}"
+                 )
 
-    logger.info(f"Initial state - Total: {total_bills}, "
-                 f"Extracted: {extracted_count}, "
-                 f"Failed: {failed_count}, "
-                 f"Remaining: {unattempted_count}")
 
     result = []
-    bills_to_fetch = progress_df[progress_df['Status'] != ExtractStatus.EXTRACTED.value]
+    mask = (ledger_df['Extract Status'] != ExtractStatus.SUCCESSFUL.value)
+    bills_to_fetch = ledger_df[mask]
 
     for i, row_num in enumerate(bills_to_fetch.index):
         if i >= limit:
@@ -148,40 +118,30 @@ async def batch_extract_bill_info(client: CongressAPIClient, congress_num: int, 
         bill_type, bill_num = row[['Bill Type', 'Bill Number']]
         
         try:
-            bill_info = await client.get_bill_info(congress_num, bill_type, bill_num)            
-            bill_summary = await client.get_bill_summary(congress_num, bill_type, bill_num)
-            cosponsors = await client.get_bill_cosponsors(congress_num, bill_type, bill_num)
-
-            bills_to_fetch.at[row_num, "Status"] = ExtractStatus.EXTRACTED.value
-            current_item = {'bill': bill_info,
-                            'summary': bill_summary,
-                            'cosponsors': cosponsors}
+            current_item = await single_extract_bill_info(client, congress_num, bill_type, bill_num)
             result.append(current_item)
+            bills_to_fetch.at[row_num, "Extract Status"] = ExtractStatus.SUCCESSFUL.value
         except RateLimitError as e:
             logger.warning(f"{str(e)}")
             break
         except Exception as e:
             logger.warning(f"Extract failed for bill {congress_num, bill_type, bill_num} | Error: ({type(e)}) {e}")
-            bills_to_fetch.at[row_num, "Status"] = ExtractStatus.FAILED.value
+            bills_to_fetch.at[row_num, "Extract Status"] = ExtractStatus.FAILED.value
+            bills_to_fetch.at[row_num, "Error"] = str(e)
 
-    # update progress df
-    progress_df[progress_df['Status'] != ExtractStatus.EXTRACTED.value] = bills_to_fetch
+    # update ledger df
+    ledger_df[mask] = bills_to_fetch
+    if update_ledger:
+        utils.update_ledger(congress_num, ledger_df)
 
-    # compute initial state of progress
-    total_bills = len(progress_df)
-    extracted_count = len(progress_df[progress_df['Status'] == ExtractStatus.EXTRACTED.value])
-    failed_count = len(progress_df[progress_df['Status'] == ExtractStatus.FAILED.value])
-    unattempted_count = len(progress_df[progress_df['Status'] == ExtractStatus.UNATTEMPTED.value])
-
+    # log final state of ledger
+    current_state = utils.get_status_counts(ledger_df = ledger_df, layer = "Extract")
     end_time = time.perf_counter()
-    
-    logger.info(f"Final state - Total: {total_bills}, "
-                 f"Extracted: {extracted_count}, "
-                 f"Failed: {failed_count}, "
-                 f"Remaining: {unattempted_count}, "
-                 f"Execution time: {end_time - start_time:.2f}")
-    
-    if save_progress:
-        await update_progress(congress_num, progress_df)
+    logger.info(f"Final state - Total: {current_state['total']} | "
+                 f"Unattempted: {current_state['unattempted']} | "
+                 f"Successful: {current_state['successful']} | "
+                 f"Failed: {current_state['failed']} "
+                 f"({end_time - start_time:.2f}s)"
+                 )
 
     return result
