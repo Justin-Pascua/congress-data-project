@@ -2,6 +2,10 @@ from typing import List
 import logging
 from datetime import datetime
 
+import pandas as pd
+
+from ..tracking import utils
+from ..tracking.status import TransformStatus
 from .schemas import MemberClean, BillClean, BillSponsorshipClean
 
 logger = logging.getLogger('pipeline.transform')
@@ -22,6 +26,7 @@ def transform_members(congress_num: int, raw_members: List[dict]) -> List[Member
     """
     Applies transformations to list of dicts representing members.
     Args:
+        congress_num: the number of the congress (e.g. 119)
         raw_members: a list of dicts representing members as returned by `pipeline.extract.extract_members`
     """
     
@@ -50,24 +55,31 @@ def transform_members(congress_num: int, raw_members: List[dict]) -> List[Member
 
     return result
 
-def transform_bills(raw_bills: List[dict]) -> List[BillClean]:
+def transform_bills(congress_num: int, raw_bills: List[dict]) -> List[BillClean]:
     """
     Applies transformations to list of dicts representing bills to extract bill details.
     Args:
+        congress_num: the number of the congress (e.g. 119). Used to fetch and update ledger.
         raw_bills: a list of bills as returned by `pipeline.extract.batch_extract_bill_info`
     """
-    
     logger.info(f"Starting bill transformation: {len(raw_bills)} raw records")
     
+    ledger_df = utils.read_ledger(congress_num)
     result = []
     failures = 0
 
     for raw_bill in raw_bills:
+        # api returns bill_type in upper case, but we use lower case within ledger_df
+        bill_type = raw_bill['bill']['type'].lower()
+        
+        # api returns bill nums as strings, but we want int in order to index ledger_df
+        bill_num = int(raw_bill['bill']['number'])      
+        
         try:
             clean_bill = BillClean(
-                congress_num = raw_bill['bill']['congress'],
-                bill_type = raw_bill['bill']['type'],
-                bill_num = raw_bill['bill']['number'],
+                congress_num = congress_num,
+                bill_type = bill_type,
+                bill_num = bill_num,
 
                 introduced_date = datetime.strptime(raw_bill['bill']['introducedDate'],"%Y-%m-%d"),
                 title = raw_bill['bill']['title'],
@@ -77,12 +89,16 @@ def transform_bills(raw_bills: List[dict]) -> List[BillClean]:
                 summary = nested_get(raw_bill, 'summary', 'summary')
             )
             result.append(clean_bill)
+            ledger_df.at[(congress_num, bill_type, bill_num), "Transform Status"] = TransformStatus.SUCCESSFUL.value
         except Exception as e:
             failures += 1
+            error_str = f"({type(e)}) {e}"
             logger.warning(f"Bill transformation failed. ID: {raw_bill['bill']['congress'], raw_bill['bill']['type'], raw_bill['bill']['number']}"
-                           f" | Error: {e}")
+                           f" | Error: {error_str}")
+            ledger_df.at[(congress_num, bill_type, bill_num), "Transform Status"] = TransformStatus.FAILED.value
+            ledger_df.at[(congress_num, bill_type, bill_num), "Error"] = error_str
 
-    
+    utils.update_ledger(congress_num, ledger_df)
     logger.info(f"Completed bill transformation: {len(result)} cleaned, {failures} failures")
     
     return result
