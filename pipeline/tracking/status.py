@@ -12,5 +12,6 @@ class TransformStatus(Enum):
 
 class LoadStatus(Enum):
     UNATTEMPTED = "L_UNATTEMPTED"
-    FAILED = "L_FAILED"
+    BILL_FAILED = "L_B_FAILED"
+    SPONSORSHIP_FAILED = "L_S_FAILED"
     SUCCESSFUL = "L_SUCCESSFUL"

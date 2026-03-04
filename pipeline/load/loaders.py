@@ -7,6 +7,8 @@ import logging
 from .models import Member, Bill, BillSponsorship
 from .database import Session
 from ..transform.schemas import MemberClean, BillClean, BillSponsorshipClean
+from ..tracking import utils
+from ..tracking.status import LoadStatus
 
 logger = logging.getLogger('pipeline.load')
 
@@ -44,13 +46,16 @@ def upsert_members(clean_members: List[MemberClean]) -> None:
 
     logger.info(f"Completed member upsert: {inserted} inserted, {updated} updated")
     
-def upsert_bills(clean_bills: List[BillClean]) -> None:
+def upsert_bills(congress_num: int, clean_bills: List[BillClean]) -> None:
     """
     Upsert bill info into db.
     Args:
+        congress_num: the number of the congress (e.g. 119). Used to fetch and update ledger.
         clean_bills: a list of bills as returned by `pipeline.transform.transform_bills`
     """
     logger.info(f"Starting bill upsert: {len(clean_bills)} records")
+    ledger_df = utils.read_ledger(congress_num)
+    ledger_indices = list(set((item.congress_num, item.bill_type.value, item.bill_num) for item in clean_bills))
     
     with Session() as db:
         bill_dicts = [bill.model_dump() for bill in clean_bills]
@@ -67,24 +72,36 @@ def upsert_bills(clean_bills: List[BillClean]) -> None:
             Bill.congress_num, Bill.bill_type, Bill.bill_num,
             (column('xmax') == 0).label('was_inserted')
         )
+        try:
+            result = db.execute(stmt)
+            db.commit()
 
-        result = db.execute(stmt)
-        db.commit()
+            rows = result.all()
+            inserted = sum(1 for row in rows if row.was_inserted)
+            updated = len(rows) - inserted
 
-        rows = result.all()
-        inserted = sum(1 for row in rows if row.was_inserted)
-        updated = len(rows) - inserted
+            ledger_df.loc[ledger_indices, 'Load Status'] = LoadStatus.SUCCESSFUL.value
+            logger.info(f"Completed bill upsert: {inserted} inserted, {updated} updated")
+        except Exception as e:
+            # sqlalchemy error messages usually very long, so take only first 100 chars
+            error_str = f"({type(e)}) {str(e)[:100]}"
+            ledger_df.loc[ledger_indices, 'Load Status'] = LoadStatus.BILL_FAILED.value
+            ledger_df.loc[ledger_indices, 'Error'] = error_str
+            logger.info(f"Failed bill upsert: {error_str}")
 
-    logger.info(f"Completed bill upsert: {inserted} inserted, {updated} updated")
+        utils.update_ledger(congress_num, ledger_df)
 
-def upsert_sponsorships(clean_sponsorships: List[BillSponsorshipClean], refresh_time: datetime = datetime.now()) -> None:
+def upsert_sponsorships(congress_num: int, clean_sponsorships: List[BillSponsorshipClean], refresh_time: datetime = datetime.now()) -> None:
     """
     Upsert bill info into db.
     Args:
+        congress_num: the number of the congress (e.g. 119). Used to fetch and update ledger.
         clean_sponsorship: a list of bill sponsorship details as returned by `pipeline.transform.transform_bill_sponsorship`
         refresh_time: a `datetime` object indicating the time of extraction. This value gets written into the "last_refresh" column of the "bill_sponsorship" table. 
     """
     logger.info(f"Starting sponsorship upsert: {len(clean_sponsorships)} records")
+    ledger_df = utils.read_ledger(congress_num)
+    ledger_indices = list(set((item.congress_num, item.bill_type.value, item.bill_num) for item in clean_sponsorships))
 
     with Session() as db:
         sponsorship_dicts = [sponsorship.model_dump() | {'is_active': True, 'last_refresh': refresh_time}
@@ -104,11 +121,21 @@ def upsert_sponsorships(clean_sponsorships: List[BillSponsorshipClean], refresh_
             BillSponsorship.bill_num,
             (column('xmax') == 0).label('was_inserted')
         )
-        result = db.execute(stmt)
-        db.commit()
+        try:
+            result = db.execute(stmt)
+            db.commit()
 
-        rows = result.all()
-        inserted = sum(1 for row in rows if row.was_inserted)
-        updated = len(rows) - inserted
+            rows = result.all()
+            inserted = sum(1 for row in rows if row.was_inserted)
+            updated = len(rows) - inserted
 
-    logger.info(f"Completed sponsorship upsert: {inserted} inserted, {updated} updated")
+            # leave success status up to upsert_bills
+            logger.info(f"Completed sponsorship upsert: {inserted} inserted, {updated} updated")
+        except Exception as e:
+            # sqlalchemy error messages usually very long, so take only first 100 chars
+            error_str = f"({type(e)}) {str(e)[:100]}"
+            ledger_df.loc[ledger_indices, 'Load Status'] = LoadStatus.SPONSORSHIP_FAILED.value
+            ledger_df.loc[ledger_indices, 'Error'] = error_str
+            logger.info(f"Failed sponsorship upsert: {error_str}")
+
+    utils.update_ledger(congress_num, ledger_df)

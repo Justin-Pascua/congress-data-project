@@ -22,7 +22,7 @@ def initialize_ledger(congress_num: int, bill_ids = List[tuple]) -> None:
     df['Load Status'] = LoadStatus.UNATTEMPTED.value
 
     # column to store potential error messages
-    df['Error'] = pd.Series(pd.NA, dtype = "string")
+    df['Error'] = pd.Series(pd.NA, dtype = str)
 
     df.set_index(['Congress Number', 'Bill Type', 'Bill Number'], inplace = True)
 
@@ -72,6 +72,7 @@ def _reset_ledger(congress_num):
     ledger_df['Extract Status'] = ExtractStatus.UNATTEMPTED.value
     ledger_df['Transform Status'] = TransformStatus.UNATTEMPTED.value
     ledger_df['Load Status'] = LoadStatus.UNATTEMPTED.value
+    ledger_df['Error'] = pd.Series(pd.NA, dtype = str)
     update_ledger(congress_num, ledger_df)
 
 
