@@ -77,14 +77,13 @@ async def single_extract_bill_info(client: CongressAPIClient,
     
     return result
 
-async def batch_extract_bill_info(client: CongressAPIClient, congress_num: int, ledger_df: pd.DataFrame, 
+async def batch_extract_bill_info(client: CongressAPIClient, ledger_df: pd.DataFrame, 
                                   limit: int = 250, update_ledger: bool = True) -> List[dict]:
     """
     Returns list of bill info in a specified congress using bill identifiers specified by `progress_df`. 
     Note that extraction will stop if the API rate limit is reached.
     Args:
         client: a `CongressAPIClient` instance used to make requests to the API
-        congress_num: the number of the congress (e.g. 119)
         ledger_df: a `pd.DataFrame` as outputted by the `read_ledger` function
         limit: the max number of bills to extract
         update_ledger: a bool specifiyng whether or not to call `update_ledger` to update the progress file. 
@@ -94,6 +93,7 @@ async def batch_extract_bill_info(client: CongressAPIClient, congress_num: int, 
     start_time = time.perf_counter()
     
     # log initial state of ledger
+    congress_num = ledger_df.index[0][0]
     logger.info(f"Starting batch extraction for congress {congress_num}")
     current_state = utils.get_status_counts(ledger_df = ledger_df, layer = "Extract")
     logger.info(f"Initial state - Total: {current_state['total']} | "
@@ -102,32 +102,29 @@ async def batch_extract_bill_info(client: CongressAPIClient, congress_num: int, 
                  f"Failed: {current_state['failed']}"
                  )
 
-
     result = []
     mask = (ledger_df['Extract Status'] != ExtractStatus.SUCCESSFUL.value)
     bills_to_fetch = ledger_df[mask]
 
-    for i, row_num in enumerate(bills_to_fetch.index):
-        if i >= limit:
+    for count, index in enumerate(bills_to_fetch.index):
+        if count >= limit:
             logger.info(f"Batch limit of {limit} reached. Stopping.")
             break
-        if (i+1) % 25 == 0:
-            logger.info(f"Batch extract progress: {i+1} attempted")
+        if (count + 1) % 25 == 0:
+            logger.info(f"Batch extract progress: {count+1} attempted")
 
-        row = bills_to_fetch.iloc[row_num]
-        bill_type, bill_num = row[['Bill Type', 'Bill Number']]
-        
+        congress_num, bill_type, bill_num = index
         try:
             current_item = await single_extract_bill_info(client, congress_num, bill_type, bill_num)
             result.append(current_item)
-            bills_to_fetch.at[row_num, "Extract Status"] = ExtractStatus.SUCCESSFUL.value
+            bills_to_fetch.at[index, "Extract Status"] = ExtractStatus.SUCCESSFUL.value
         except RateLimitError as e:
             logger.warning(f"{str(e)}")
             break
         except Exception as e:
             logger.warning(f"Extract failed for bill {congress_num, bill_type, bill_num} | Error: ({type(e)}) {e}")
-            bills_to_fetch.at[row_num, "Extract Status"] = ExtractStatus.FAILED.value
-            bills_to_fetch.at[row_num, "Error"] = str(e)
+            bills_to_fetch.at[index, "Extract Status"] = ExtractStatus.FAILED.value
+            bills_to_fetch.at[index, "Error"] = str(e)
 
     # update ledger df
     ledger_df[mask] = bills_to_fetch

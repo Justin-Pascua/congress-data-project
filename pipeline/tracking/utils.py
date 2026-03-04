@@ -16,11 +16,15 @@ def initialize_ledger(congress_num: int, bill_ids = List[tuple]) -> None:
     """
 
     df = pd.DataFrame(bill_ids, columns = ['Bill Type', 'Bill Number'])
+    df['Congress Number'] = congress_num
     df['Extract Status'] = ExtractStatus.UNATTEMPTED.value
     df['Transform Status'] = TransformStatus.UNATTEMPTED.value
     df['Load Status'] = LoadStatus.UNATTEMPTED.value
+
     # column to store potential error messages
-    df['Error'] = pd.NA
+    df['Error'] = pd.Series(pd.NA, dtype = "string")
+
+    df.set_index(['Congress Number', 'Bill Type', 'Bill Number'], inplace = True)
 
     root_dir = Path.cwd()
     output_dir = root_dir / "ledger" / f"congress-{congress_num}"
@@ -29,7 +33,7 @@ def initialize_ledger(congress_num: int, bill_ids = List[tuple]) -> None:
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-    df.to_csv(full_file_path, index = False)
+    df.to_csv(full_file_path)
 
 def read_ledger(congress_num: int) -> pd.DataFrame:
     """
@@ -44,6 +48,8 @@ def read_ledger(congress_num: int) -> pd.DataFrame:
     full_file_path = output_dir / file_name
 
     df = pd.read_csv(full_file_path)
+    df.set_index(['Congress Number', 'Bill Type', 'Bill Number'], inplace = True)
+    df['Error'] = df['Error'].astype(str)
     return df
 
 def update_ledger(congress_num: int, updated_ledger_df: pd.DataFrame) -> None:
@@ -58,7 +64,7 @@ def update_ledger(congress_num: int, updated_ledger_df: pd.DataFrame) -> None:
     file_name = 'bill-ids.csv'
     full_file_path = output_dir / file_name
     
-    updated_ledger_df.to_csv(full_file_path, index = False)
+    updated_ledger_df.to_csv(full_file_path)
 
 def get_status_counts(ledger_df: pd.DataFrame, layer: Literal['Extract', 'Transform', 'Load']) -> dict:
     """
