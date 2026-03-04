@@ -11,7 +11,7 @@ from .status import ExtractStatus
 from ..exceptions import *
 from ..transform.enums import BillType
 from ..tracking import utils
-from ..tracking.status import ExtractStatus, TransformStatus, LoadStatus
+from ..tracking.status import ExtractStatus
 
 # idea:
 # - extract layer calls the api to get the bill types and bill numbers for the bills that the user wants to extract
@@ -122,9 +122,10 @@ async def batch_extract_bill_info(client: CongressAPIClient, ledger_df: pd.DataF
             logger.warning(f"{str(e)}")
             break
         except Exception as e:
-            logger.warning(f"Extract failed for bill {congress_num, bill_type, bill_num} | Error: ({type(e)}) {e}")
+            error_str = f"({type(e)}) {e}"
+            logger.warning(f"Extract failed for bill {congress_num, bill_type, bill_num} | Error: {error_str}")
             bills_to_fetch.at[index, "Extract Status"] = ExtractStatus.FAILED.value
-            bills_to_fetch.at[index, "Error"] = str(e)
+            bills_to_fetch.at[index, "Error"] = error_str
 
     # update ledger df
     ledger_df[mask] = bills_to_fetch

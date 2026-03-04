@@ -66,6 +66,15 @@ def update_ledger(congress_num: int, updated_ledger_df: pd.DataFrame) -> None:
     
     updated_ledger_df.to_csv(full_file_path)
 
+# used for internal testing
+def _reset_ledger(congress_num):
+    ledger_df = read_ledger(congress_num)
+    ledger_df['Extract Status'] = ExtractStatus.UNATTEMPTED.value
+    ledger_df['Transform Status'] = TransformStatus.UNATTEMPTED.value
+    ledger_df['Load Status'] = LoadStatus.UNATTEMPTED.value
+    update_ledger(congress_num, ledger_df)
+
+
 def get_status_counts(ledger_df: pd.DataFrame, layer: Literal['Extract', 'Transform', 'Load']) -> dict:
     """
     Computes the number of unattempted, successful, and failed items within a specified pipeline layer.
