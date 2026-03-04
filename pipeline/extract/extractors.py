@@ -135,16 +135,16 @@ async def batch_extract_bill_info(client: CongressAPIClient, congress_num: int, 
                  f"Remaining: {unattempted_count}")
 
     result = []
-    unattempted_bills = progress_df[progress_df['Status'] == ExtractStatus.UNATTEMPTED.value]
+    bills_to_fetch = progress_df[progress_df['Status'] != ExtractStatus.EXTRACTED.value]
 
-    for i, row_num in enumerate(unattempted_bills.index):
+    for i, row_num in enumerate(bills_to_fetch.index):
         if i >= limit:
             logger.info(f"Batch limit of {limit} reached. Stopping.")
             break
         if (i+1) % 25 == 0:
             logger.info(f"Batch extract progress: {i+1} attempted")
 
-        row = unattempted_bills.iloc[row_num]
+        row = bills_to_fetch.iloc[row_num]
         bill_type, bill_num = row[['Bill Type', 'Bill Number']]
         
         try:
@@ -152,7 +152,7 @@ async def batch_extract_bill_info(client: CongressAPIClient, congress_num: int, 
             bill_summary = await client.get_bill_summary(congress_num, bill_type, bill_num)
             cosponsors = await client.get_bill_cosponsors(congress_num, bill_type, bill_num)
 
-            unattempted_bills.at[row_num, "Status"] = ExtractStatus.EXTRACTED.value
+            bills_to_fetch.at[row_num, "Status"] = ExtractStatus.EXTRACTED.value
             current_item = {'bill': bill_info,
                             'summary': bill_summary,
                             'cosponsors': cosponsors}
@@ -160,12 +160,12 @@ async def batch_extract_bill_info(client: CongressAPIClient, congress_num: int, 
         except RateLimitError as e:
             logger.warning(f"{str(e)}")
             break
-        except:
-            logger.warning(f"Extract failed for bill {congress_num, bill_type, bill_num}")
-            unattempted_bills.at[row_num, "Status"] = ExtractStatus.FAILED.value
+        except Exception as e:
+            logger.warning(f"Extract failed for bill {congress_num, bill_type, bill_num} | Error: ({type(e)}) {e}")
+            bills_to_fetch.at[row_num, "Status"] = ExtractStatus.FAILED.value
 
     # update progress df
-    progress_df[progress_df['Status'] == ExtractStatus.UNATTEMPTED.value] = unattempted_bills
+    progress_df[progress_df['Status'] != ExtractStatus.EXTRACTED.value] = bills_to_fetch
 
     # compute initial state of progress
     total_bills = len(progress_df)

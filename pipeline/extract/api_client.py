@@ -57,7 +57,7 @@ class CongressAPIClient:
         """
         status_code = response.status_code
         if status_code >= 500:
-            raise RuntimeError("Unexpected server error from Congress API")
+            raise RuntimeError(f"Unexpected server error from Congress API. Error code: {response.status_code}. {dir(response)}")
         elif status_code == 429:
             raise RateLimitError("Rate limit exceeded")
         elif status_code == 403:
