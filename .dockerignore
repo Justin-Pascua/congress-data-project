@@ -1,0 +1,13 @@
+*__pycache__*
+.venv/
+.env*
+.vscode/
+.gitignore
+
+logs/
+ledger/
+
+demo.ipynb
+foo.py
+test.py
+
