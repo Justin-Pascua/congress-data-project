@@ -1,6 +1,6 @@
 *__pycache__*
 .venv/
-.env
+.env*
 
 demo.ipynb
 db_scripts/
@@ -8,5 +8,10 @@ db_scripts/
 ledger/
 dummy_data/
 logs/
+
+airflow/logs/
+airflow/config/
+docker-compose.yaml
+
 foo.py
 test.py
