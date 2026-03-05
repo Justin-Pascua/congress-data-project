@@ -6,17 +6,16 @@ import os
 
 from .status import ExtractStatus, TransformStatus, LoadStatus
 
-def ledger_exists(congress_num: int):
+def ledger_path(congress_num: int) -> Path:
+    return Path.cwd() / "ledger" / f"congress-{congress_num}/bill-ids.csv"
+
+def ledger_exists(congress_num: int) -> bool:
     """
     Checks if the ledger file for a given congress_num exists in the expected directory. 
     Args:
         congress_num: the number of the congress (e.g. 119)
     """
-    root_dir = Path.cwd()
-    output_dir = root_dir / "ledger" / f"congress-{congress_num}"
-    file_name = 'bill-ids.csv'
-    full_file_path = output_dir / file_name
-    return os.path.exists(full_file_path)
+    return os.path.exists(ledger_path(congress_num))
 
 def initialize_ledger(congress_num: int, bill_ids = List[tuple]) -> None:
     """
@@ -38,14 +37,12 @@ def initialize_ledger(congress_num: int, bill_ids = List[tuple]) -> None:
 
     df.set_index(['Congress Number', 'Bill Type', 'Bill Number'], inplace = True)
 
-    root_dir = Path.cwd()
-    output_dir = root_dir / "ledger" / f"congress-{congress_num}"
-    file_name = 'bill-ids.csv'
-    full_file_path = output_dir / file_name
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    # not using ledger_path() because need to ensure that directory exists
+    ledger_dir = Path.cwd() / "ledger" / f"congress-{congress_num}"
+    os.makedirs(ledger_dir, exist_ok = True)
+    ledger_path = ledger_dir / "bill-ids.csv"
 
-    df.to_csv(full_file_path)
+    df.to_csv(ledger_path)
 
 def read_ledger(congress_num: int) -> pd.DataFrame:
     """
@@ -54,12 +51,7 @@ def read_ledger(congress_num: int) -> pd.DataFrame:
     Args:
         congress_num: the number of the congress (e.g. 119)
     """
-    root_dir = Path.cwd()
-    output_dir = root_dir / "ledger" / f"congress-{congress_num}"
-    file_name = 'bill-ids.csv'
-    full_file_path = output_dir / file_name
-
-    df = pd.read_csv(full_file_path)
+    df = pd.read_csv(ledger_path(congress_num))
     df.set_index(['Congress Number', 'Bill Type', 'Bill Number'], inplace = True)
     df['Error'] = df['Error'].astype(str)
     return df
@@ -71,12 +63,7 @@ def update_ledger(congress_num: int, updated_ledger_df: pd.DataFrame) -> None:
         congress_num: the number of the congress (e.g. 119) 
         update_ledger_df: a `pd.DataFrame` containing the updated statuses of the bills
     """
-    root_dir = Path.cwd()
-    output_dir = root_dir / "ledger" / f"congress-{congress_num}"
-    file_name = 'bill-ids.csv'
-    full_file_path = output_dir / file_name
-    
-    updated_ledger_df.to_csv(full_file_path)
+    updated_ledger_df.to_csv(ledger_path(congress_num))
 
 # used for internal testing
 def _reset_ledger(congress_num):
