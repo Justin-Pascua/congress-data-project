@@ -7,6 +7,11 @@ import os
 from .status import ExtractStatus, TransformStatus, LoadStatus
 
 def ledger_exists(congress_num: int):
+    """
+    Checks if the ledger file for a given congress_num exists in the expected directory. 
+    Args:
+        congress_num: the number of the congress (e.g. 119)
+    """
     root_dir = Path.cwd()
     output_dir = root_dir / "ledger" / f"congress-{congress_num}"
     file_name = 'bill-ids.csv'

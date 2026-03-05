@@ -61,7 +61,7 @@ def congress_pipeline():
     def batch_etl_bills(**context):
         congress_num = context["params"]["congress_num"]
         batch_size = context["params"]["batch_size"]
-        num_batches = context["params"]["batch_size"]
+        num_batches = context["params"]["num_batches"]
         ledger_df = utils.read_ledger(congress_num)
         async def _batch_etl_bills():
             api_key = os.getenv('API_KEY')
