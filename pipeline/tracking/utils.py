@@ -6,6 +6,13 @@ import os
 
 from .status import ExtractStatus, TransformStatus, LoadStatus
 
+def ledger_exists(congress_num: int):
+    root_dir = Path.cwd()
+    output_dir = root_dir / "ledger" / f"congress-{congress_num}"
+    file_name = 'bill-ids.csv'
+    full_file_path = output_dir / file_name
+    return os.path.exists(full_file_path)
+
 def initialize_ledger(congress_num: int, bill_ids = List[tuple]) -> None:
     """
     Writes a csv file containing the identifiers for congress bills. Column names are Bill Type, Bill Number, and Status.

@@ -7,7 +7,6 @@ from typing import List, Optional, Literal
 import logging
 
 from .api_client import CongressAPIClient
-from .status import ExtractStatus
 from ..exceptions import *
 from ..transform.enums import BillType
 from ..tracking import utils
