@@ -35,7 +35,7 @@ class CongressAPIClient:
             follow_redirects = True, 
             timeout = 15,
             limits = httpx.Limits(
-                    max_keepalive_connections=20,
+                    max_keepalive_connections=10,
                     max_connections=50,
                     keepalive_expiry=60.0
                 )
