@@ -1,5 +1,6 @@
 from airflow.sdk import dag, task, Param
 from datetime import datetime, timedelta
+import logging
 import os
 import asyncio
 
@@ -57,38 +58,69 @@ def congress_pipeline():
             utils.initialize_ledger(congress_num, bill_ids)
         asyncio.run(_create_ledger())
 
-    @task(trigger_rule = "none_failed_min_one_success")
-    def batch_etl_bills(**context):
+    @task()
+    def get_batch_indices(**context):
+        num_batches = context["params"]["num_batches"]
+        return list(range(num_batches))
+    
+    @task(trigger_rule = "none_failed_min_one_success",
+          max_active_tis_per_dag = 1)
+    def batch_etl_bills(batch_num, **context):
         congress_num = context["params"]["congress_num"]
         batch_size = context["params"]["batch_size"]
-        num_batches = context["params"]["num_batches"]
         ledger_df = utils.read_ledger(congress_num)
+
         async def _batch_etl_bills():
             api_key = os.getenv('API_KEY')
             client = ex.CongressAPIClient(api_key)
             
-            for i in range(num_batches):
-                print("="*25, f"Batch {i+1}", "="*25)
-                # extract
-                raw_bills = await ex.batch_extract_bill_info(client, ledger_df, batch_size)
+            print("="*25, f"Batch {batch_num+1}", "="*25)
+            # extract
+            raw_bills = await ex.batch_extract_bill_info(client, ledger_df, batch_size)
 
-                # transform 
-                clean_bills = tf.transform_bills(congress_num, raw_bills)
-                clean_sponsorships = tf.transform_bill_sponsorships(raw_bills)
+            # transform 
+            clean_bills = tf.transform_bills(congress_num, raw_bills)
+            clean_sponsorships = tf.transform_bill_sponsorships(raw_bills)
 
-                # load 
-                ld.upsert_bills(congress_num, clean_bills)
-                ld.upsert_sponsorships(congress_num, clean_sponsorships)
+            # load 
+            ld.upsert_bills(congress_num, clean_bills)
+            ld.upsert_sponsorships(congress_num, clean_sponsorships)
 
         asyncio.run(_batch_etl_bills())
+
+    @task(trigger_rule = "all_done")
+    def summarize_ledger(**context):
+        logger = logging.getLogger("airflow.task")
+        congress_num = context["params"]["congress_num"]
+        ledger_df = utils.read_ledger(118)
+        ex_states = utils.get_status_counts(ledger_df, 'Extract')
+        tf_states = utils.get_status_counts(ledger_df, 'Transform')
+        ld_states = utils.get_status_counts(ledger_df, 'Load')
+        ex_states, tf_states, ld_states
+
+        unattempted = ex_states['unattempted']
+        ex_failures = ex_states['failed']
+        tf_failures = tf_states['failed']
+        ld_failures = ld_states['failed']
+        successes = ld_states['successful']
+
+        output_str = f"""Final State 
+        \t- Unattempted: {unattempted}
+        \t- Extract Failures: {ex_failures}
+        \t- Transform Failures: {tf_failures}
+        \t- Load Failures: {ld_failures}
+        \t- Successes: {successes}"""
+        logger.info(output_str)
 
     etl_members_task = etl_members()
     branch = check_ledger_exists()
     create_ledger_task = create_ledger()
-    batch_etl_bills_task = batch_etl_bills()
+    batch_indices = get_batch_indices()
+    batch_etl_bills_task = batch_etl_bills.expand(batch_num=batch_indices)
+    summary_task = summarize_ledger()
 
     [etl_members_task, branch] 
     branch >> [create_ledger_task, batch_etl_bills_task]
-    create_ledger_task >> batch_etl_bills_task
+    create_ledger_task >> batch_etl_bills_task >> summary_task
 
 pipeline_dag = congress_pipeline()
