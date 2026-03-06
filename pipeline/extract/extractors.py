@@ -6,6 +6,7 @@ import time
 from typing import List, Optional, Literal
 from datetime import datetime
 import logging
+from dataclasses import dataclass
 
 from .api_client import CongressAPIClient
 from ..exceptions import *
@@ -23,6 +24,11 @@ from ..tracking.status import ExtractStatus
 logger = logging.getLogger("pipeline.extract")
 
 VALID_BILL_TYPES = [item.value for item in BillType]
+
+@dataclass
+class BatchExtractResult:
+    bills: List[dict]
+    rate_limited: bool
 
 async def extract_members(client: CongressAPIClient, congress_num: int) -> list:
     """
@@ -79,7 +85,7 @@ async def single_extract_bill_info(client: CongressAPIClient,
     return result
 
 async def batch_extract_bill_info(client: CongressAPIClient, ledger_df: pd.DataFrame, 
-                                  limit: int = 250, update_ledger: bool = True) -> List[dict]:
+                                  limit: int = 250, update_ledger: bool = True) -> BatchExtractResult:
     """
     Returns list of bill info in a specified congress using bill identifiers specified by `progress_df`. 
     Note that extraction will stop if the API rate limit is reached.
@@ -90,7 +96,7 @@ async def batch_extract_bill_info(client: CongressAPIClient, ledger_df: pd.DataF
         update_ledger: a bool specifiyng whether or not to call `update_ledger` to update the progress file. 
         If `True`, then `update_ledger` is called. Otherwise, `update_ledger` is not called.
     """
-
+    
     start_time = time.perf_counter()
     
     # log initial state of ledger
@@ -103,8 +109,12 @@ async def batch_extract_bill_info(client: CongressAPIClient, ledger_df: pd.DataF
                  f"Failed: {current_state['failed']}"
                  )
 
-    result = []
-    mask = (ledger_df['Extract Status'] != ExtractStatus.SUCCESSFUL.value)
+    result = BatchExtractResult(
+        bills = [],
+        rate_limited = False
+    )
+    
+    mask = (ledger_df['Extract Status'] == ExtractStatus.UNATTEMPTED.value)
     bills_to_fetch = ledger_df[mask]
 
     for count, index in enumerate(bills_to_fetch.index):
@@ -117,10 +127,11 @@ async def batch_extract_bill_info(client: CongressAPIClient, ledger_df: pd.DataF
         congress_num, bill_type, bill_num = index
         try:
             current_item = await single_extract_bill_info(client, congress_num, bill_type, bill_num)
-            result.append(current_item)
+            result.bills.append(current_item)
             bills_to_fetch.at[index, "Extract Status"] = ExtractStatus.SUCCESSFUL.value
         except RateLimitError as e:
             logger.warning(f"{str(e)}")
+            result.rate_limited = True
             break
         except Exception as e:
             error_str = f"({type(e)}) {e}"
