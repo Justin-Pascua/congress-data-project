@@ -1,13 +1,14 @@
 import httpx
 import asyncio
 from typing import Literal, Optional, List
+from datetime import datetime
 import logging
 
 from ..exceptions import *
 
 BASE_URL = 'https://api.congress.gov/v3'
 RATE_THRESHOLD = 100
-NUM_RETRIES = 5
+NUM_RETRIES = 10
 
 logger = logging.getLogger("pipeline.extract")
 
@@ -41,8 +42,18 @@ class CongressAPIClient:
                 )
             )
         
-        response = await self.client.get('/congress/current')
-        self.remaining_calls = int(response.headers['x-ratelimit-remaining'])
+        base_delay = 0.5
+        for attempt in range(NUM_RETRIES):
+            try:
+                response = await self.client.get('/congress/current', timeout = 15)
+                self.remaining_calls = int(response.headers['x-ratelimit-remaining'])
+            except (httpx.ConnectError, httpx.ReadTimeout, RuntimeError) as e:
+                if attempt == NUM_RETRIES - 1:
+                    raise 
+
+                delay = base_delay * (2 ** attempt)
+                await asyncio.sleep(delay)
+        
 
     async def close(self):
         if self.client:
@@ -142,18 +153,25 @@ class CongressAPIClient:
 
         return members
     
-    async def get_all_bills(self, congress_num: int, bill_type: str) -> list:
+    async def get_all_bills(self, congress_num: int, bill_type: str, start_date: datetime = None) -> list:
         """
-        Returns a list of all bills in a specified congress of a specified type.
+        Returns a list of all bills in a specified congress of a specified type whose last update occurred after or on `start_date`.
         Args:
             congress_num: the number of the congress (e.g. 119)
             bill_type: the type of bill. Acceptable values are "hr", "s", "hjres", "sjres", "hconres", "sconres", "hres", or "sres"
+            start_date: a `datetime` object used to filter results.
         """
         bills = []
 
         i = 0
         while True:
-            response = await self._request_with_retry('get', f'/bill/{congress_num}/{bill_type}',params = {'offset': 250*i})
+            # can't set 'fromDateTime': `None` because API returns 400 response
+            params = {'offset': 250*i}
+            if start_date is not None:
+                params['fromDateTime'] = start_date.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+            response = await self._request_with_retry('get', f'/bill/{congress_num}/{bill_type}',
+                                                      params = {'offset': 250*i})
             data = response.json()
                 
             if len(data['bills']) == 0:

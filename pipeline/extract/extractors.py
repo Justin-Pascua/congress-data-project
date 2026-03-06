@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 import time
 from typing import List, Optional, Literal
+from datetime import datetime
 import logging
 
 from .api_client import CongressAPIClient
@@ -35,9 +36,10 @@ async def extract_members(client: CongressAPIClient, congress_num: int) -> list:
     logger.info(f"Extracted {len(members)} members in congress {congress_num}")
     return members
 
-async def get_bill_ids(client: CongressAPIClient, congress_num: int = None) -> List[tuple]:
+async def get_bill_ids(client: CongressAPIClient, congress_num: int = None, start_date: datetime = None) -> List[tuple]:
     """
-    Returns a list of bill identifiers, whose elements are tuples of the form (`bill_type`, `bill_num`)
+    Returns a list of bill identifiers for bills whose last update occurred before or on `start_date`. 
+    Elements of the returned list are tuples of the form (`bill_type`, `bill_num`)
     Args:
         client: a `CongressAPIClient` instance used to make requests to the API
         congress_num: the number of the congress (e.g. 119)
