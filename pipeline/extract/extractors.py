@@ -84,25 +84,25 @@ async def single_extract_bill_info(client: CongressAPIClient,
     
     return result
 
-async def batch_extract_bill_info(client: CongressAPIClient, ledger_df: pd.DataFrame, 
-                                  limit: int = 250, update_ledger: bool = True) -> BatchExtractResult:
+async def batch_extract_bill_info(client: CongressAPIClient, queue_df: pd.DataFrame, 
+                                  limit: int = 250, update_queue: bool = True) -> BatchExtractResult:
     """
     Returns list of bill info in a specified congress using bill identifiers specified by `progress_df`. 
     Note that extraction will stop if the API rate limit is reached.
     Args:
         client: a `CongressAPIClient` instance used to make requests to the API
-        ledger_df: a `pd.DataFrame` as outputted by the `read_ledger` function
+        queue_df: a `pd.DataFrame` as outputted by the `read_queue` function
         limit: the max number of bills to extract
-        update_ledger: a bool specifiyng whether or not to call `update_ledger` to update the progress file. 
-        If `True`, then `update_ledger` is called. Otherwise, `update_ledger` is not called.
+        update_queue: a bool specifiyng whether or not to call `update_queue` to update the progress file. 
+        If `True`, then `update_queue` is called. Otherwise, `update_queue` is not called.
     """
     
     start_time = time.perf_counter()
     
-    # log initial state of ledger
-    congress_num = ledger_df.index[0][0]
+    # log initial state of queue
+    congress_num = queue_df.index[0][0]
     logger.info(f"Starting batch extraction for congress {congress_num}")
-    current_state = utils.get_status_counts(ledger_df = ledger_df, layer = "Extract")
+    current_state = utils.get_status_counts(queue_df = queue_df, layer = "Extract")
     logger.info(f"Initial state - Total: {current_state['total']} | "
                  f"Unattempted: {current_state['unattempted']} | "
                  f"Successful: {current_state['successful']} | "
@@ -114,8 +114,8 @@ async def batch_extract_bill_info(client: CongressAPIClient, ledger_df: pd.DataF
         rate_limited = False
     )
     
-    mask = (ledger_df['Extract Status'] == ExtractStatus.UNATTEMPTED.value)
-    bills_to_fetch = ledger_df[mask]
+    mask = (queue_df['Extract Status'] == ExtractStatus.UNATTEMPTED.value)
+    bills_to_fetch = queue_df[mask]
 
     for count, index in enumerate(bills_to_fetch.index):
         if count >= limit:
@@ -139,13 +139,13 @@ async def batch_extract_bill_info(client: CongressAPIClient, ledger_df: pd.DataF
             bills_to_fetch.at[index, "Extract Status"] = ExtractStatus.FAILED.value
             bills_to_fetch.at[index, "Error"] = error_str
 
-    # update ledger df
-    ledger_df[mask] = bills_to_fetch
-    if update_ledger:
-        utils.update_ledger(congress_num, ledger_df)
+    # update queue df
+    queue_df[mask] = bills_to_fetch
+    if update_queue:
+        utils.commit_queue(congress_num, queue_df)
 
-    # log final state of ledger
-    current_state = utils.get_status_counts(ledger_df = ledger_df, layer = "Extract")
+    # log final state of queue
+    current_state = utils.get_status_counts(queue_df = queue_df, layer = "Extract")
     end_time = time.perf_counter()
     logger.info(f"Final state - Total: {current_state['total']} | "
                  f"Unattempted: {current_state['unattempted']} | "
