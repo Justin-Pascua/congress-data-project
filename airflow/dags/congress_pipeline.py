@@ -48,9 +48,9 @@ def pipeline_start():
             return context["logical_date"] - timedelta(days = 7*weeks_back)
 
     @task()
-    def get_bills(last_run_date: datetime | None, **context):
+    def get_bill_ids(last_run_date: datetime | None, **context):
         congress_num = context["params"]["congress_num"]
-        async def _get_bills():
+        async def _get_bill_ids():
             api_key = os.getenv('API_KEY')
             client = ex.CongressAPIClient(api_key)
 
@@ -63,7 +63,12 @@ def pipeline_start():
                 prev_fails = utils.read_failures(congress_num)
                 prev_fails = utils.reset_statuses(prev_fails)
                 queue_df = pd.concat([prev_fails, queue_df])
-        asyncio.run(_get_bills())
+                utils.remove_failures_file(queue_df)
+            
+            # save queue to file
+            utils.commit_queue(queue_df)
+
+        asyncio.run(_get_bill_ids())
 
 
     exit_dag = TriggerDagRunOperator(
@@ -74,10 +79,9 @@ def pipeline_start():
     )
 
     get_date_task = get_start_date()
-    write_bills_task = get_bills(get_date_task)
+    write_bills_task = get_bill_ids(get_date_task)
     
     write_bills_task >> exit_dag
-
 
 @dag(
     dag_id = "pipeline_run",
@@ -206,7 +210,6 @@ def pipeline_run():
     bill_etl >> rate_check >> [wait_for_rate_limit, retrigger]
     wait_for_rate_limit >> retrigger_after_sleep
     
-
 @dag(
     dag_id = "pipeline_cleanup",
     description = "Records failures from queue file and deletes queue.",
@@ -220,7 +223,21 @@ def pipeline_run():
     catchup = False,
     max_active_runs = 1)
 def pipeline_cleanup():
-    pass
+    @task()
+    def record_errors(**context):
+        congress_num = context["params"]["congress_num"]
+        queue_df = utils.read_queue(congress_num)
+        utils.record_failures(queue_df)
+
+    @task()
+    def clear_queue(**context):
+        congress_num = context["params"]["congress_num"]
+        utils.remove_queue_file(congress_num)
+
+    record_task = record_errors()
+    clear_task = clear_queue()
+
+    record_task >> clear_task
 
 pipeline_segment_1 = pipeline_start()
 pipeline_segment_2 = pipeline_run()
