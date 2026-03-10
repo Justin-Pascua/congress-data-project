@@ -171,12 +171,17 @@ class CongressAPIClient:
                 params['fromDateTime'] = start_date.strftime('%Y-%m-%dT%H:%M:%SZ')
 
             response = await self._request_with_retry('get', f'/bill/{congress_num}/{bill_type}',
-                                                      params = {'offset': 250*i})
+                                                      params = params)
             data = response.json()
+            
+            if i == 0:
+                num_bills = data['pagination']['count']
+                logger.info(f"Identified {num_bills} of type {bill_type}")
                 
             if len(data['bills']) == 0:
                 break
             bills.extend(data['bills'])
+            logger.info(f"Current count for bills of type {bill_type}: {len(bills)}")
             i += 1
 
         return bills
