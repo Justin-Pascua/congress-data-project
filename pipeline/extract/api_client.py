@@ -176,12 +176,11 @@ class CongressAPIClient:
             
             if i == 0:
                 num_bills = data['pagination']['count']
-                logger.info(f"Identified {num_bills} of type {bill_type}")
+                logger.info(f"Identified bills {num_bills} of type {bill_type}")
                 
             if len(data['bills']) == 0:
                 break
             bills.extend(data['bills'])
-            logger.info(f"Current count for bills of type {bill_type}: {len(bills)}")
             i += 1
 
         return bills
