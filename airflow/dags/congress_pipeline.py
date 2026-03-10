@@ -70,17 +70,28 @@ def pipeline_start():
 
         asyncio.run(_get_bill_ids())
 
-    exit_dag = TriggerDagRunOperator(
-        task_id = "exit_dag",
-        trigger_dag_id = "pipeline_run",
-        conf = {"congress_num": "{{ params.congress_num }}",
-                "batch_size": "{{ params.batch_size }}"}
-    )
+    @task()
+    def exit_dag(**context):
+        congress_num = context["params"]["congress_num"]
+        batch_size = context["params"]["batch_size"]
+        
+        TriggerDagRunOperator(
+            task_id = "exit_dag",
+            trigger_dag_id = "pipeline_run",
+            conf = {
+                "congress_num": congress_num,
+                "batch_size": batch_size,
+                "rate_limit_retries": 0,
+                "pull_members": True
+            }
+        ).execute(context)
 
     get_date_task = get_start_date()
     write_bills_task = get_bill_ids(get_date_task)
+    exit_task = exit_dag()
     
-    write_bills_task >> exit_dag
+    write_bills_task >> exit_task
+
 
 @dag(
     dag_id = "pipeline_run",
@@ -88,7 +99,7 @@ def pipeline_start():
     tags = ["congress_pipeline"],
     default_args = default_args,
     params={
-       "congress_num": Param(default = 118, type = "integer", description = "Congress number to fetch"),
+       "congress_num": Param(default = 119, type = "integer", description = "Congress number to fetch"),
        "batch_size": Param(default = 250, type = "integer", description = "Number of bills to extract per batch"),
        # last two params are handled by TriggerDagRunOperators
        "rate_limit_retries": Param(default = 0, type = "integer"),
@@ -127,11 +138,14 @@ def pipeline_run():
         else:
             return "batch_etl_bills"
 
-    exit_dag = TriggerDagRunOperator(
-        task_id = "exit_dag",
-        trigger_dag_id = "pipeline_cleanup",
-        conf = {"congress_num": "{{ params.congress_num }}"}
-    )
+    @task()
+    def exit_dag(**context):
+        congress_num = context["params"]["congress_num"]
+        TriggerDagRunOperator(
+            task_id = "exit_dag",
+            trigger_dag_id = "pipeline_cleanup",
+            conf = {"congress_num": congress_num}
+        ).execute(context)
 
     @task()
     def batch_etl_bills(**context):
@@ -180,34 +194,46 @@ def pipeline_run():
         poke_interval = 60
     )
 
-    retrigger = TriggerDagRunOperator(
-        task_id = "retrigger",
-        trigger_dag_id = "pipeline_run",
-        conf = {"congress_num": "{{ params.congress_num }}",
-                "batch_size": "{{ params.batch_size }}",
-                "rate_limit_retries": 0, # reset num retries if DAG was not slept
-                "pull_members": "false"
-                }
-    )
+    @task()
+    def retrigger(**context):
+        congress_num = context["params"]["congress_num"]
+        batch_size = context["params"]["batch_size"]
+        TriggerDagRunOperator(
+            task_id = "retrigger",
+            trigger_dag_id = "pipeline_run",
+            conf = {"congress_num": congress_num,
+                    "batch_size": batch_size,
+                    "rate_limit_retries": 0, # reset num retries if DAG was not slept
+                    "pull_members": False
+                    }
+        ).execute(context)
 
-    retrigger_after_sleep = TriggerDagRunOperator(
+    @task()
+    def retrigger_after_sleep(**context):
+        congress_num = context["params"]["congress_num"]
+        batch_size = context["params"]["batch_size"]
+        rate_limit_retries = context["params"]["rate_limit_retries"]
+        TriggerDagRunOperator(
         task_id = "retrigger_after_sleep",
         trigger_dag_id = "pipeline_run",
-        conf = {"congress_num": "{{ params.congress_num }}",
-                "batch_size": "{{ params.batch_size }}",
-                "rate_limit_retries": "{{ params.rate_limit_retries | int + 1 }}",   # rate limit hit, so increment num retries by one
-                "pull_members": "false"
+        conf = {"congress_num": congress_num,
+                "batch_size": batch_size,
+                "rate_limit_retries": rate_limit_retries + 1,   # rate limit hit, so increment num retries by one
+                "pull_members": False
                 }
-    )
+        ).execute(context) 
 
     members_task = etl_members()
+    exit_task = exit_dag()
     queue_check = check_queue_state()
     bill_etl = batch_etl_bills()
     rate_check = check_rate_limit(bill_etl)
+    retrigger_task = retrigger()
+    sleep_retrigger_task = retrigger_after_sleep()
 
-    queue_check >> [exit_dag, bill_etl]
-    bill_etl >> rate_check >> [wait_for_rate_limit, retrigger]
-    wait_for_rate_limit >> retrigger_after_sleep
+    queue_check >> [exit_task, bill_etl]
+    bill_etl >> rate_check >> [wait_for_rate_limit, retrigger_task]
+    wait_for_rate_limit >> sleep_retrigger_task
     
 @dag(
     dag_id = "pipeline_cleanup",
