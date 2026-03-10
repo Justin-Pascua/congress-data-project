@@ -65,7 +65,7 @@ def commit_queue(congress_num: int, updated_queue_df: pd.DataFrame) -> None:
         update_queue_df: a `pd.DataFrame` containing the updated statuses of the bills
     """
     # ensure that directory exists
-    os.makedirs(QUEUE_DIR, exist_ok = True)
+    os.makedirs(QUEUE_DIR / f"congress-{congress_num}", exist_ok = True)
 
     updated_queue_df.to_csv(queue_path(congress_num))
 
@@ -122,7 +122,7 @@ def record_failures(queue_df: pd.DataFrame) -> None:
                             (queue_df['Transform Status'] == TransformStatus.FAILED.value) | 
                             (queue_df['Load Status'] == LoadStatus.FAILED.value)]
     # ensure that directory exists
-    os.makedirs(QUEUE_DIR, exist_ok = True)
+    os.makedirs(QUEUE_DIR / f"congress-{congress_num}", exist_ok = True)
     failures_df.to_csv(failures_path(congress_num))
 
 def remove_failures_file(congress_num: int) -> None:

@@ -25,12 +25,12 @@ default_args = {
     tags = ["congress_pipeline"],
     default_args = default_args,
     params={
-        "congress_num": Param(default = 118, type = "integer", description = "Congress number to fetch"),
+        "congress_num": Param(default = 119, type = "integer", description = "Congress number to fetch"),
         "batch_size": Param(default = 250, type = "integer", description = "Number of bills to extract per batch"),
         "mode": Param(default = "incremental", enum = ["incremental", "full"],
                       description = "Specifies whether to pull all bills from the specified congress, "
                       "or only the bills updated since the specified number of `weeks_back`."),
-        "weeks_back": Param(default = 1, type = "integer", 
+        "weeks_back": Param(default = 1, type = ["null", "integer"], 
                             description = "Only used in incremental mode. Number of weeks back to fetch updated bills.")
        },
     start_date = datetime(2026, 3, 5),
@@ -55,7 +55,7 @@ def pipeline_start():
             client = ex.CongressAPIClient(api_key)
 
             # get bills updated since last run
-            bill_ids = ex.get_bill_ids(client, congress_num, last_run_date)
+            bill_ids = await ex.get_bill_ids(client, congress_num, last_run_date)
             queue_df = utils.generate_queue(congress_num, bill_ids)
 
             # get bills that pipeline failed on prev run
@@ -66,14 +66,13 @@ def pipeline_start():
                 utils.remove_failures_file(queue_df)
             
             # save queue to file
-            utils.commit_queue(queue_df)
+            utils.commit_queue(congress_num, queue_df)
 
         asyncio.run(_get_bill_ids())
 
-
     exit_dag = TriggerDagRunOperator(
         task_id = "exit_dag",
-        trigger_dag_id = "etl_bills",
+        trigger_dag_id = "pipeline_run",
         conf = {"congress_num": "{{ params.congress_num }}",
                 "batch_size": "{{ params.batch_size }}"}
     )
@@ -108,13 +107,13 @@ def pipeline_run():
             return
 
         congress_num = context["params"]["congress_num"]
-        async def _batch_etl_bills():
+        async def _batch_etl_members():
             api_key = os.getenv('API_KEY')
             client = ex.CongressAPIClient(api_key)
             raw_members = await ex.extract_members(client, congress_num)
             clean_members = tf.transform_members(congress_num, raw_members)
             ld.upsert_members(clean_members)
-        asyncio.run(_batch_etl_bills())
+        asyncio.run(_batch_etl_members())
 
     @task.branch()
     def check_queue_state(**context):
@@ -126,11 +125,11 @@ def pipeline_run():
         if unattempted == 0:
             return "exit_dag"
         else:
-            return "etl_bills"
+            return "batch_etl_bills"
 
     exit_dag = TriggerDagRunOperator(
         task_id = "exit_dag",
-        trigger_dag_id = "clean_up",
+        trigger_dag_id = "pipeline_cleanup",
         conf = {"congress_num": "{{ params.congress_num }}"}
     )
 
@@ -183,7 +182,7 @@ def pipeline_run():
 
     retrigger = TriggerDagRunOperator(
         task_id = "retrigger",
-        trigger_dag_id = "etl_bills",
+        trigger_dag_id = "pipeline_run",
         conf = {"congress_num": "{{ params.congress_num }}",
                 "batch_size": "{{ params.batch_size }}",
                 "rate_limit_retries": 0, # reset num retries if DAG was not slept
@@ -193,7 +192,7 @@ def pipeline_run():
 
     retrigger_after_sleep = TriggerDagRunOperator(
         task_id = "retrigger_after_sleep",
-        trigger_dag_id = "etl_bills",
+        trigger_dag_id = "pipeline_run",
         conf = {"congress_num": "{{ params.congress_num }}",
                 "batch_size": "{{ params.batch_size }}",
                 "rate_limit_retries": "{{ params.rate_limit_retries | int + 1 }}",   # rate limit hit, so increment num retries by one

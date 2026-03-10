@@ -49,6 +49,7 @@ async def get_bill_ids(client: CongressAPIClient, congress_num: int = None, star
     Args:
         client: a `CongressAPIClient` instance used to make requests to the API
         congress_num: the number of the congress (e.g. 119)
+        start_date: a `datetime` object used to filter results.
     """
     logger.info(f"Fetching bill ids for congress {congress_num}")
     if congress_num is None:
@@ -57,7 +58,7 @@ async def get_bill_ids(client: CongressAPIClient, congress_num: int = None, star
 
     bill_ids = []
     for bill_type in VALID_BILL_TYPES:
-        bills_of_type = await client.get_all_bills(congress_num, bill_type)
+        bills_of_type = await client.get_all_bills(congress_num, bill_type, start_date)
         current_bill_ids = [(bill_type, bill['number']) for bill in bills_of_type]
         bill_ids.extend(current_bill_ids)
     logger.info(f"Identified {len(bill_ids)} bills in congress {congress_num}")
