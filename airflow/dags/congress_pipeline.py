@@ -25,7 +25,7 @@ default_args = {
     tags = ["congress_pipeline"],
     default_args = default_args,
     params={
-        "congress_num": Param(default = 119, type = "integer", description = "Congress number to fetch"),
+        "congress_num": Param(default = None, type = ["null", "integer"], description = "Congress number to fetch. If not provided, then the API is called to fetch the current congress."),
         "batch_size": Param(default = 250, type = "integer", description = "Number of bills to extract per batch"),
         "mode": Param(default = "incremental", enum = ["incremental", "full"],
                       description = "Specifies whether to pull all bills from the specified congress, "
@@ -39,6 +39,19 @@ default_args = {
     max_active_runs = 1)
 def pipeline_start():
     @task()
+    def get_congress(**context) -> int:
+        congress_num_param = context["params"]["congress_num"]
+        if congress_num_param is not None:
+            return congress_num_param
+        else:
+            async def _get_current_congress():
+                api_key = os.getenv('API_KEY')
+                client = ex.CongressAPIClient(api_key)
+                current_details = await client.get_current_congress()
+                return current_details["congress_num"]
+            return asyncio.run(_get_current_congress())
+
+    @task()
     def get_start_date(**context) -> datetime | None:
         mode = context["params"]["mode"]
         if mode == "full":
@@ -48,14 +61,13 @@ def pipeline_start():
             return context["logical_date"] - timedelta(days = 7*weeks_back)
 
     @task()
-    def get_bill_ids(last_run_date: datetime | None, **context):
-        congress_num = context["params"]["congress_num"]
+    def get_bill_ids(congress_num: int, start_date: datetime | None):
         async def _get_bill_ids():
             api_key = os.getenv('API_KEY')
             client = ex.CongressAPIClient(api_key)
 
             # get bills updated since last run
-            bill_ids = await ex.get_bill_ids(client, congress_num, last_run_date)
+            bill_ids = await ex.get_bill_ids(client, congress_num, start_date)
             queue_df = utils.generate_queue(congress_num, bill_ids)
 
             # get bills that pipeline failed on prev run
@@ -71,8 +83,7 @@ def pipeline_start():
         asyncio.run(_get_bill_ids())
 
     @task()
-    def exit_dag(**context):
-        congress_num = context["params"]["congress_num"]
+    def exit_dag(congress_num: int, **context):
         batch_size = context["params"]["batch_size"]
         
         TriggerDagRunOperator(
@@ -86,9 +97,10 @@ def pipeline_start():
             }
         ).execute(context)
 
+    get_congress_task = get_congress()
     get_date_task = get_start_date()
-    write_bills_task = get_bill_ids(get_date_task)
-    exit_task = exit_dag()
+    write_bills_task = get_bill_ids(get_congress_task, get_date_task)
+    exit_task = exit_dag(get_congress_task)
     
     write_bills_task >> exit_task
 
