@@ -91,28 +91,24 @@ def upsert_bills(congress_num: int, clean_bills: List[BillClean]) -> None:
 
         utils.commit_queue(congress_num, queue_df)
 
-def upsert_sponsorships(congress_num: int, clean_sponsorships: List[BillSponsorshipClean], refresh_time: datetime = datetime.now()) -> None:
+def upsert_sponsorships(congress_num: int, clean_sponsorships: List[BillSponsorshipClean]) -> None:
     """
     Upsert bill info into db.
     Args:
         congress_num: the number of the congress (e.g. 119). Used to fetch and update queue.
         clean_sponsorship: a list of bill sponsorship details as returned by `pipeline.transform.transform_bill_sponsorship`
-        refresh_time: a `datetime` object indicating the time of extraction. This value gets written into the "last_refresh" column of the "bill_sponsorship" table. 
-    """
+        """
     logger.info(f"Starting sponsorship upsert: {len(clean_sponsorships)} records")
     queue_df = utils.read_queue(congress_num)
     queue_indices = list(set((item.congress_num, item.bill_type.value, item.bill_num) for item in clean_sponsorships))
 
     with Session() as db:
-        sponsorship_dicts = [sponsorship.model_dump() | {'is_active': True, 'last_refresh': refresh_time}
-                            for sponsorship in clean_sponsorships]
+        sponsorship_dicts = [sponsorship.model_dump() for sponsorship in clean_sponsorships]
         stmt = insert(BillSponsorship).values(sponsorship_dicts)
         stmt = stmt.on_conflict_do_update(
             index_elements = ['bio_guide_id', 'congress_num', 'bill_type', 'bill_num'],
             set_ = {
-                'sponsorship_type': stmt.excluded.sponsorship_type,
-                'is_active': stmt.excluded.is_active,
-                'last_refresh': stmt.excluded.last_refresh,
+                'sponsorship_type': stmt.excluded.sponsorship_type
             }
         ).returning(
             BillSponsorship.bio_guide_id,

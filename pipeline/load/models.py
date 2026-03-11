@@ -89,8 +89,6 @@ class BillSponsorship(Base):
     bill_num: Mapped[int] = mapped_column(Integer, primary_key = True)
     
     sponsorship_type: Mapped[SponsorshipType] = mapped_column(Enum(SponsorshipType), nullable = False)
-    is_active: Mapped[bool] = mapped_column(Boolean, default = True)
-    last_refresh: Mapped[datetime] = mapped_column(DateTime, default = lambda: datetime.now())
 
     __table_args__ = (
         ForeignKeyConstraint(
