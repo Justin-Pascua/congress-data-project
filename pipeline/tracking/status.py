@@ -1,16 +1,16 @@
 from enum import Enum, auto
 
 class ExtractStatus(Enum):
-    UNATTEMPTED = "E_UNATTEMPTED"
-    FAILED = "E_FAILED"
-    SUCCESSFUL = "E_SUCCESSFUL"
+    UNATTEMPTED = auto()
+    FAILED = auto()
+    SUCCESSFUL = auto()
 
 class TransformStatus(Enum):
-    UNATTEMPTED = "T_UNATTEMPTED"
-    FAILED = "T_FAILED"
-    SUCCESSFUL = "T_SUCCESSFUL"
+    UNATTEMPTED = auto()
+    FAILED = auto()
+    SUCCESSFUL = auto()
 
 class LoadStatus(Enum):
-    UNATTEMPTED = "L_UNATTEMPTED"
-    FAILED = "L_FAILED"
-    SUCCESSFUL = "L_SUCCESSFUL"
+    UNATTEMPTED = auto()
+    FAILED = auto()
+    SUCCESSFUL = auto()
