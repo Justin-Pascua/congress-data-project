@@ -12,6 +12,8 @@ import asyncio
 from pipeline import extract as ex, transform as tf, load as ld
 from pipeline.tracking import utils
 
+logger = logging.getLogger(__name__)
+
 default_args = {
     "owner": "JustinP",
     "retries": 5,
@@ -75,7 +77,7 @@ def pipeline_start():
                 prev_fails = utils.read_failures(congress_num)
                 prev_fails = utils.reset_statuses(prev_fails)
                 queue_df = pd.concat([prev_fails, queue_df])
-                utils.remove_failures_file(queue_df)
+                utils.remove_failures_file(congress_num)
             
             # save queue to file
             utils.commit_queue(congress_num, queue_df)

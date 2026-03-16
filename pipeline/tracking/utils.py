@@ -73,6 +73,8 @@ def remove_queue_file(congress_num: int) -> None:
     os.remove(queue_path(congress_num))
 
 def reset_statuses(bills_df) -> pd.DataFrame:
+    if len(bills_df) == 0:
+        return bills_df
     bills_df['Extract Status'] = ExtractStatus.UNATTEMPTED.value
     bills_df['Transform Status'] = TransformStatus.UNATTEMPTED.value
     bills_df['Load Status'] = LoadStatus.UNATTEMPTED.value
