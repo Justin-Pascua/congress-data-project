@@ -263,6 +263,21 @@ def pipeline_run():
     max_active_runs = 1)
 def pipeline_cleanup():
     @task()
+    def summarize(**context):
+        congress_num = context["params"]["congress_num"]
+        queue_df = utils.read_queue(congress_num)
+        e_statuses = utils.get_status_counts(queue_df, 'Extract')
+        t_statuses = utils.get_status_counts(queue_df, 'Transform')
+        l_statuses = utils.get_status_counts(queue_df, 'Load')
+        
+        summary_str = f"Total items attempted: {len(queue_df)}\n" \
+        f"Extract - Successes: {e_statuses['successful']} | Failures: {e_statuses['failed']}\n" \
+        f"Transform - Successes: {t_statuses['successful']} | Failures: {t_statuses['failed']}\n" \
+        f"Load - Successes: {l_statuses['successful']} | Failures: {l_statuses['failed']}\n" 
+        
+        logger.info(summary_str)
+
+    @task()
     def record_errors(**context):
         congress_num = context["params"]["congress_num"]
         queue_df = utils.read_queue(congress_num)
@@ -273,10 +288,11 @@ def pipeline_cleanup():
         congress_num = context["params"]["congress_num"]
         utils.remove_queue_file(congress_num)
 
+    summary_task = summarize()
     record_task = record_errors()
     clear_task = clear_queue()
 
-    record_task >> clear_task
+    summary_task >> record_task >> clear_task
 
 pipeline_segment_1 = pipeline_start()
 pipeline_segment_2 = pipeline_run()
