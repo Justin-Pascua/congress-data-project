@@ -3,7 +3,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 
-from .enums import Chamber, BillType, SponsorshipType
+from database.enums import Chamber, BillType, SponsorshipType
 
 class MemberClean(BaseModel):
     congress_num: int

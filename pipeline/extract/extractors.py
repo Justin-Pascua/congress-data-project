@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 from .api_client import CongressAPIClient
 from ..exceptions import *
-from ..transform.enums import BillType
+from database.enums import BillType
 from ..tracking import utils
 from ..tracking.status import ExtractStatus
 

@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import (String, Integer, Date, DateTime, Enum, Text, Boolean,
                         UniqueConstraint, ForeignKey, ForeignKeyConstraint)
 from sqlalchemy.orm import Mapped, mapped_column, relationship, declarative_base
-from ..transform.enums import Chamber, SponsorshipType, BillType
+from .enums import Chamber, SponsorshipType, BillType
 
 MAX_STR_LEN = 40
 

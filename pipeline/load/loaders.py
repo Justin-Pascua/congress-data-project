@@ -4,8 +4,8 @@ from datetime import datetime
 from typing import List
 import logging
 
-from .models import Member, Bill, BillSponsorship
-from .database import Session
+from database.models import Member, Bill, BillSponsorship
+from database.conn import Session
 from ..transform.schemas import MemberClean, BillClean, BillSponsorshipClean
 from ..tracking import utils
 from ..tracking.status import LoadStatus
