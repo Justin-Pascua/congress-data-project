@@ -99,19 +99,20 @@ class BillDataset(Dataset):
         x, y = self.X.iloc[index], self.y.iloc[index]
         return x, y
     
-def make_collate_fn(tokenizer):
+# default value of 2048 was chosen because, during development, 90% of samples were found to be <= 2048 tokens long
+def make_collate_fn(tokenizer, max_length: int = 2048):
     """
     Factory function that creates collate_fn to be passed to a torch `DataLoader` object. 
     Args:
         tokenizer: a HuggingFace tokenizer. This handles the work of padding sequences with zeroes
+        max_length: int passed to tokenizer to determine max token length of sequences. 
     """
     def collate_fn(batch):
         features, labels = zip(*batch)
         x = tokenizer(features, 
                       padding = "longest", 
                       truncation = True,
-                      # ModernBERT has max len of 8192, but 90% of the samples are <= 2048 tokens long 
-                      max_length = 2048, 
+                      max_length = max_length, 
                       return_tensors = "pt")
         y = torch.tensor(labels, dtype = torch.long)
         # HF model expects labels in 'labels' parameter
