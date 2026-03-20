@@ -84,7 +84,6 @@ def policy_area_simplifier(raw_policy_area: str) -> str:
     except:
         return raw_policy_area
     
-
 class BillDataset(Dataset):
     def __init__(self, df: pd.DataFrame, feature_col: str | List[str], target_col: str | List[str]):
         self.X = df[feature_col].reset_index(drop = True)
@@ -99,8 +98,7 @@ class BillDataset(Dataset):
         x, y = self.X.iloc[index], self.y.iloc[index]
         return x, y
     
-# default value of 2048 was chosen because, during development, 90% of samples were found to be <= 2048 tokens long
-def make_collate_fn(tokenizer, max_length: int = 2048):
+def make_collate_fn(tokenizer, max_length: int = None):
     """
     Factory function that creates collate_fn to be passed to a torch `DataLoader` object. 
     Args:
@@ -120,16 +118,18 @@ def make_collate_fn(tokenizer, max_length: int = 2048):
 
     return collate_fn
 
-def get_dataloader(dataset: BillDataset, tokenizer, **kwargs) -> DataLoader:
+def get_dataloader(dataset: BillDataset, tokenizer, max_length: int = None, **kwargs) -> DataLoader:
     """
     Returns a torch `DataLoader` equipped with a collate_fn as returned by `make_collate_fn`.
     Args:
         dataset: a `BillDataset` object.
         tokenizer: a HuggingFace tokenizer passed to `make_collate_fn` to construct the collate_fn passed to the `DataLoader` constructor.
+        max_length: int passed to tokenizer to determine max token length of sequences. 
     """
+    
     dataloader = DataLoader(
         dataset, 
-        collate_fn = make_collate_fn(tokenizer),
+        collate_fn = make_collate_fn(tokenizer, max_length),
         **kwargs
     )
     return dataloader
