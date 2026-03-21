@@ -6,7 +6,6 @@ import time
 from datetime import timedelta
 import logging
 from tqdm import tqdm
-from tqdm.contrib.logging import logging_redirect_tqdm
 
 from .metrics import MetricAccumulator
 
@@ -14,7 +13,17 @@ logger = logging.getLogger(__name__)
 
 def train_step(model, optimizer, 
                train_dataloader: DataLoader, 
-               device = torch.device("cpu")) -> dict:
+               device: torch.device = torch.device("cpu"),
+               return_cm: bool = False) -> dict:
+    """
+    Runs a single training epoch over the provided dataloader, and returns metrics.
+    Args:
+        model: the model to be trained.
+        optimizer: the optimizer used to update model weights.
+        train_dataloader: a `DataLoader` providing training batches.
+        device: a `torch.device` specifying which device to run on.
+        return_cm: a `bool` indicating whether to return the confusion matrix. 
+    """
     model.train()
 
     loss = 0.
@@ -46,11 +55,24 @@ def train_step(model, optimizer,
     pbar.set_postfix(formatted_metrics)
     pbar.close()
 
+    if return_cm:
+        full_metrics = full_metrics | {'confusion_matrix': metric_accumulator.get_confusion_matrix()}
+
     return full_metrics
 
 def eval_step(model, 
               dataloader: DataLoader,
-              device = torch.device("cpu")) -> dict:
+              device = torch.device("cpu"),
+              return_cm: bool = False) -> dict:
+    """
+    Runs a single evaluation epoch over the provided dataloader.
+
+    Args:
+        model: The model to be evaluated.
+        dataloader: a `Dataloader` providing validation batches.
+        device: a `torch.device` specifying which device to run on.
+        return_cm: a `bool` indicating whether to return the confusion matrix. 
+    """
     model.eval()
 
     loss = 0.
@@ -79,6 +101,9 @@ def eval_step(model,
     pbar.set_postfix(formatted_metrics)
     pbar.close()
 
+    if return_cm:
+        full_metrics = full_metrics | {'confusion_matrix': metric_accumulator.get_confusion_matrix()}
+
     return full_metrics
 
 def train_loop(model, optimizer,
@@ -87,20 +112,34 @@ def train_loop(model, optimizer,
                epochs: int,
                device = torch.device("cpu")
                ) -> list:
-
+    """
+    Runs the full training loop over a specified number of epochs.
+    Args:
+        model: the model to be trained.
+        optimizer: the optimizer used to update model weights.
+        train_dataloader: a `DataLoader` providing training batches.
+        val_dataloader: a `Dataloader` providing validation batches.
+        epochs: an `int` specifying the number of epochs to train for.
+        device: a `torch.device` specifying which device to run on.
+    """
     start = time.perf_counter()
     logger.info(f"Beginning training loop")
 
     history = {'train': [], 'val': []}    
     
     for epoch in range(epochs):
+        return_cm = False
+        if epoch == epochs - 1:
+            # only get confusion matrix on last epoch
+            return_cm = True
+
         intermed_start = time.perf_counter()
         logger.info(f"Epoch {epoch + 1} starting")
         
-        train_metrics = train_step(model, optimizer, train_dataloader, device)        
-        history['train'].append(train_metrics)
-        val_metrics = eval_step(model, val_dataloader, device)
-        history['val'].append(val_metrics)
+        train_info = train_step(model, optimizer, train_dataloader, device, return_cm)        
+        history['train'].append(train_info)
+        val_info = eval_step(model, val_dataloader, device, return_cm)
+        history['val'].append(val_info)
         intermed_end = time.perf_counter()
         logger.info(f"Epoch {epoch + 1} finished ({timedelta(seconds = int(intermed_end - intermed_start))})")
 

@@ -76,5 +76,3 @@ class MetricAccumulator:
             case _: raise ValueError(f"normalize must be 'true', 'pred', 'all', or None. Got '{normalize}'")
         
         return cm / np.maximum(denom, 1)
-
-  
