@@ -50,6 +50,7 @@ def pipeline_start():
                 api_key = os.getenv('API_KEY')
                 client = ex.CongressAPIClient(api_key)
                 current_details = await client.get_current_congress()
+                await client.close()
                 return current_details["congress_num"]
             return asyncio.run(_get_current_congress())
 
@@ -81,6 +82,8 @@ def pipeline_start():
             
             # save queue to file
             utils.commit_queue(congress_num, queue_df)
+
+            await client.close()
 
         asyncio.run(_get_bill_ids())
 
@@ -138,6 +141,7 @@ def pipeline_run():
             raw_members = await ex.extract_members(client, congress_num)
             clean_members = tf.transform_members(congress_num, raw_members)
             ld.upsert_members(clean_members)
+            await client.close()
         asyncio.run(_batch_etl_members())
 
     @task.branch()
@@ -182,6 +186,8 @@ def pipeline_run():
             # load 
             ld.upsert_bills(congress_num, clean_bills)
             ld.upsert_sponsorships(congress_num, clean_sponsorships)
+
+            await client.close()
 
             return result.rate_limited  # indicates whether or not to rerun immediately or wait
 

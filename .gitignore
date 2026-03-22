@@ -15,5 +15,7 @@ airflow/config/
 docker-compose.yaml
 
 mlflow.db
+ml/main/config.yaml
+ml/finetuned/
 
 dev_utils/
