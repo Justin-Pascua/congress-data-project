@@ -53,7 +53,6 @@ class CongressAPIClient:
 
                 delay = base_delay * (2 ** attempt)
                 await asyncio.sleep(delay)
-        
 
     async def close(self):
         if self.client:
@@ -153,22 +152,27 @@ class CongressAPIClient:
 
         return members
     
-    async def get_all_bills(self, congress_num: int, bill_type: str, start_date: datetime = None) -> list:
+    async def get_all_bills(self, congress_num: int, bill_type: str, start_date: datetime = None, end_date: datetime = None) -> list:
         """
         Returns a list of all bills in a specified congress of a specified type whose last update occurred after or on `start_date`.
         Args:
             congress_num: the number of the congress (e.g. 119)
             bill_type: the type of bill. Acceptable values are "hr", "s", "hjres", "sjres", "hconres", "sconres", "hres", or "sres"
-            start_date: a `datetime` object used to filter results.
+            start_date: the starting timestamp to filter by update date
+            end_date: the ending timestamp to filter by update date
         """
         bills = []
 
+        params = dict()
+        # can't set dates equal to `None` because API returns 400 response
+        if start_date is not None:
+            params['fromDateTime'] = start_date.strftime('%Y-%m-%dT%H:%M:%SZ')
+        if end_date is not None:
+            params['toDateTime'] = end_date.strftime('%Y-%m-%dT%H:%M:%SZ')
+
         i = 0
         while True:
-            # can't set 'fromDateTime': `None` because API returns 400 response
-            params = {'offset': 250*i}
-            if start_date is not None:
-                params['fromDateTime'] = start_date.strftime('%Y-%m-%dT%H:%M:%SZ')
+            params['offset'] = 250*i
 
             response = await self._request_with_retry('get', f'/bill/{congress_num}/{bill_type}',
                                                       params = params)
