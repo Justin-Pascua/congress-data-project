@@ -16,6 +16,6 @@ docker-compose.yaml
 
 mlflow.db
 ml/main/config.yaml
-ml/finetuned/
+mlruns/
 
 dev_utils/

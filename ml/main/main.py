@@ -1,66 +1,114 @@
 import torch
 import torch.nn as nn
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
+import transformers
+import mlflow
 
 import yaml
 import dotenv
+from pathlib import Path
 
-from database.read import read_bills
 from .preprocessing import training_data_pipeline
 from ..utils.training import train_loop
+from ..utils.data import encoder
+from ..utils.visualization import plot_cm
 
 if __name__ == '__main__':
 
     dotenv.load_dotenv()
-
+    transformers.logging.set_verbosity_error()
+    
     with open("./ml/main/config.yaml", "r") as f:
         config = yaml.safe_load(f)
+    
+    mlflow.set_tracking_uri("sqlite:///mlflow.db")
+    mlflow.set_experiment(config['mlflow']['experiment'])
 
-    device = None
-    if torch.cuda.is_available():
-        device = torch.device("cuda")
-        print(f"Using GPU: {torch.cuda.get_device_name(0)}") #
-    else:
-        device = torch.device("cpu")
-        print("Using CPU")
+    with mlflow.start_run() as run:
+        device = None
+        if torch.cuda.is_available():
+            device = torch.device("cuda")
+            print(f"Using GPU: {torch.cuda.get_device_name(0)}") #
+        else:
+            device = torch.device("cpu")
+            print("Using CPU")
         
-    tokenizer, model = None, None
-    try:
-        tokenizer = AutoTokenizer.from_pretrained(config['model']['checkpoint']['finetuned'])
-        model = AutoModelForSequenceClassification.from_pretrained(config['model']['checkpoint']['finetuned'])
-    except:
-        tokenizer = AutoTokenizer.from_pretrained(
-            config['model']['checkpoint']['base']
-        )
-        model = AutoModelForSequenceClassification.from_pretrained(
-            config['model']['checkpoint']['base'], 
-            num_labels = config['model']['num_labels']
-        )
-    model = model.to(device)
+        tokenizer, model = None, None
+        try:
+            checkpoint = config['model']['checkpoint']['finetuned']
+            tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+            model = AutoModelForSequenceClassification.from_pretrained(checkpoint)
+        except:
+            checkpoint = config['model']['checkpoint']['base']
+            tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+            model = AutoModelForSequenceClassification.from_pretrained(checkpoint, num_labels = config['model']['num_labels'])
+        mlflow.set_tag("checkpoint_source", checkpoint)
+        model = model.to(device)
 
-    dataloaders = training_data_pipeline(
-        tokenizer = tokenizer, 
-        train_start_date = config['dataset']['train']['start_date'],
-        train_end_date = config['dataset']['train']['end_date'],
-        test_start_date = config['dataset']['test']['start_date'],
-        test_end_date = config['dataset']['test']['end_date'],
-        val_frac = config['dataset']['train']['val_frac'],
-        max_length = config['training']['max_length'],
-        batch_size = config['training']['batch_size']
-    )
+        # training hyperparams (e.g. batch size, epochs, lr, etc.)
+        mlflow.log_params(config['training'])
 
-    optimizer = torch.optim.AdamW(
-        params = model.parameters(), 
-        lr = config['training']['learning_rate'], 
-        weight_decay = config['training']['weight_decay']
-    )
-    history = train_loop(
-        model = model,
-        optimizer = optimizer,
-        train_dataloader = dataloaders['train'],
-        val_dataloader = dataloaders['val'],
-        epochs = config['training']['epochs'],
-        device = device
-    )
+        dataloaders = training_data_pipeline(
+            tokenizer = tokenizer, 
+            train_start_date = config['dataset']['train']['start_date'],
+            train_end_date = config['dataset']['train']['end_date'],
+            test_start_date = config['dataset']['test']['start_date'],
+            test_end_date = config['dataset']['test']['end_date'],
+            val_frac = config['dataset']['train']['val_frac'],
+            max_length = config['training']['max_length'],
+            batch_size = config['training']['batch_size']
+        )
+
+        # dataset metadata (date ranges)
+        mlflow.log_params({
+            'train_start_date': config['dataset']['train']['start_date'],
+            'train_end_date': config['dataset']['train']['end_date'],
+            'val_frac': config['dataset']['train']['val_frac'],
+            'test_start_date': config['dataset']['test']['start_date'],
+            'test_end_date': config['dataset']['test']['end_date'],
+            'train_size': len(dataloaders['train'].dataset),
+            'val_size': len(dataloaders['val'].dataset),
+            'test_size': len(dataloaders['test'].dataset),
+        })
+
+        optimizer = torch.optim.AdamW(
+            params = model.parameters(), 
+            lr = config['training']['learning_rate'], 
+            weight_decay = config['training']['weight_decay']
+        )
+        history = train_loop(
+            model = model,
+            optimizer = optimizer,
+            train_dataloader = dataloaders['train'],
+            val_dataloader = dataloaders['val'],
+            epochs = config['training']['epochs'],
+            device = device
+        )
+
+        mlflow.log_metrics(
+            {f"final_train_{key}": value 
+             for key, value in history['train'][-1].items() 
+             if key != 'confusion_matrix'}
+        )
+        mlflow.log_metrics(
+            {f"final_val_{key}": value 
+             for key, value in history['val'][-1].items() 
+             if key != 'confusion_matrix'}
+        )
     
-    
+        labels = encoder.classes_
+        train_cm = plot_cm(cm = history['train'][-1]['confusion_matrix'], 
+                           labels = labels, normalize = 'true',
+                           annot_kws = {'size': 7})
+        val_cm = plot_cm(cm = history['val'][-1]['confusion_matrix'], 
+                         labels = labels, normalize = 'true',
+                         annot_kws = {'size': 7})
+
+        mlflow.log_figure(train_cm, "train_cm.png")
+        mlflow.log_figure(val_cm, "val_cm.png")
+
+        mlflow.transformers.log_model(
+            transformers_model={"model": model, "tokenizer": tokenizer},
+            name = "model",
+            pip_requirements = ['torch', 'transformers']
+        )
