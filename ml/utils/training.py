@@ -5,6 +5,7 @@ import sys
 import time
 from datetime import timedelta
 import logging
+import mlflow
 from tqdm import tqdm
 
 from .metrics import MetricAccumulator
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 def train_step(model, optimizer, 
                train_dataloader: DataLoader, 
                device: torch.device = torch.device("cpu"),
-               return_cm: bool = False) -> dict:
+               step_offset: int = 0) -> dict:
     """
     Runs a single training epoch over the provided dataloader, and returns metrics.
     Args:
@@ -22,7 +23,7 @@ def train_step(model, optimizer,
         optimizer: the optimizer used to update model weights.
         train_dataloader: a `DataLoader` providing training batches.
         device: a `torch.device` specifying which device to run on.
-        return_cm: a `bool` indicating whether to return the confusion matrix. 
+        step_offset: an `int` added to each batch index when logging to MLflow, used to produce globally unique step values across epochs.
     """
     model.train()
 
@@ -36,7 +37,7 @@ def train_step(model, optimizer,
                 file = sys.stdout,
                 leave = True)
     
-    for batch in train_dataloader:
+    for i, batch in enumerate(train_dataloader):
         batch = batch.to(device)
         out = model(**batch)
         optimizer.zero_grad()
@@ -49,21 +50,27 @@ def train_step(model, optimizer,
         pred = out.logits.argmax(dim = 1).cpu()
         metric_accumulator.update(true, pred)
         pbar.update(1)
+        mlflow.log_metrics(
+            {'train_loss': out.loss.item()} |
+            {f'train_{key}': value for key, value in metric_accumulator.compute().items()},
+            step = step_offset + i
+        )
+        
         
     full_metrics = {'loss': loss/num_batches} | metric_accumulator.compute()
     formatted_metrics = {key: f"{value:.3e}" for key, value in full_metrics.items()}
     pbar.set_postfix(formatted_metrics)
     pbar.close()
 
-    if return_cm:
-        full_metrics = full_metrics | {'confusion_matrix': metric_accumulator.get_confusion_matrix()}
+    full_metrics = full_metrics | {'confusion_matrix': metric_accumulator.get_confusion_matrix()}
 
     return full_metrics
 
 def eval_step(model, 
               dataloader: DataLoader,
-              device = torch.device("cpu"),
-              return_cm: bool = False) -> dict:
+              device: torch.device = torch.device("cpu"),
+              metric_prefix: str = 'val',
+              step_offset: int = 0) -> dict:
     """
     Runs a single evaluation epoch over the provided dataloader.
 
@@ -71,7 +78,8 @@ def eval_step(model,
         model: The model to be evaluated.
         dataloader: a `Dataloader` providing validation batches.
         device: a `torch.device` specifying which device to run on.
-        return_cm: a `bool` indicating whether to return the confusion matrix. 
+        metric_prefix: prefix applied to metric names when logging to MLflow
+        step_offset: an `int` added to each batch index when logging to MLflow, used to produce globally unique step values across epochs.
     """
     model.eval()
 
@@ -85,24 +93,29 @@ def eval_step(model,
                 file = sys.stdout,
                 leave = True)
     
-    for batch in dataloader:
+    for i, batch in enumerate(dataloader):
         with torch.no_grad():
             batch = batch.to(device)
             out = model(**batch)
 
             loss += out.loss.item()
+
             true = batch['labels'].cpu()
             pred = out.logits.argmax(dim = 1).cpu()
             metric_accumulator.update(true, pred)
-        pbar.update(1)
+            pbar.update(1)
+            mlflow.log_metrics(
+                {f'{metric_prefix}_loss': out.loss.item()} |
+                {f'{metric_prefix}_{key}': value for key, value in metric_accumulator.compute().items()},
+                step = step_offset + i
+            )
 
     full_metrics = {'loss': loss/num_batches} | metric_accumulator.compute()
     formatted_metrics = {key: f"{value:.3e}" for key, value in full_metrics.items()}
     pbar.set_postfix(formatted_metrics)
     pbar.close()
 
-    if return_cm:
-        full_metrics = full_metrics | {'confusion_matrix': metric_accumulator.get_confusion_matrix()}
+    full_metrics = full_metrics | {'confusion_matrix': metric_accumulator.get_confusion_matrix()}
 
     return full_metrics
 
@@ -128,18 +141,26 @@ def train_loop(model, optimizer,
     history = {'train': [], 'val': []}    
     
     for epoch in range(epochs):
-        return_cm = False
-        if epoch == epochs - 1:
-            # only get confusion matrix on last epoch
-            return_cm = True
-
         intermed_start = time.perf_counter()
         logger.info(f"Epoch {epoch + 1} starting")
         
-        train_info = train_step(model, optimizer, train_dataloader, device, return_cm)        
+        train_info = train_step(
+            model = model, 
+            optimizer = optimizer, 
+            train_dataloader = train_dataloader, 
+            device = device,
+            step_offset = epoch * len(train_dataloader)
+        )        
         history['train'].append(train_info)
-        val_info = eval_step(model, val_dataloader, device, return_cm)
+        
+        val_info = eval_step(
+            model = model, 
+            dataloader = val_dataloader, 
+            device = device,
+            step_offset = epoch * len(val_dataloader)
+        )
         history['val'].append(val_info)
+        
         intermed_end = time.perf_counter()
         logger.info(f"Epoch {epoch + 1} finished ({timedelta(seconds = int(intermed_end - intermed_start))})")
 

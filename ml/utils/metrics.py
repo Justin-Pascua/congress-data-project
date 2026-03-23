@@ -28,24 +28,21 @@ class MetricAccumulator:
         """
         cm = self.confusion_matrix.astype(np.float64)
         tp = np.diag(cm)
-        fp = cm.sum(axis = 0) - tp
-        fn = cm.sum(axis = 1) - tp
+        accuracy = tp.sum() / cm.sum()
+        precision = tp / np.maximum(cm.sum(axis = 0), 1)
+        recall = tp / np.maximum(cm.sum(axis = 1), 1)
+        f1 = 2 * precision * recall / np.maximum(precision + recall, 1) 
 
-        precision = tp / np.maximum(tp + fp, 1)
-        recall    = tp / np.maximum(tp + fn, 1)
-        f1        = 2 * precision * recall / np.maximum(precision + recall, 1)
-        support   = cm.sum(axis = 1)
-
-        accuracy    = tp.sum() / cm.sum()
-        w_precision = (precision * support).sum() / support.sum()
-        w_recall    = (recall * support).sum() / support.sum()
-        w_f1        = (f1 * support).sum() / support.sum()
+        accuracy = tp.sum() / cm.sum()
+        macro_precision = precision.mean()
+        macro_recall = recall.mean()
+        macro_f1 = f1.mean()
 
         return {
             'accuracy':  accuracy,
-            'f1':        w_f1,
-            'precision': w_precision,
-            'recall':    w_recall,
+            'f1':        macro_precision,
+            'precision': macro_precision,
+            'recall':    macro_recall,
         }
 
     def reset(self) -> None:

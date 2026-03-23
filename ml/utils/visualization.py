@@ -32,6 +32,7 @@ def plot_cm(cm: np.ndarray, labels: List[str], normalize: Literal['true', 'pred'
     if normalize is not None:
         cm = normalize_cm(cm, normalize)
     
+    cm = np.round(cm, 3)
     fig, ax = plt.subplots(figsize=(5,5))
         
     sns.heatmap(
@@ -41,10 +42,10 @@ def plot_cm(cm: np.ndarray, labels: List[str], normalize: Literal['true', 'pred'
         yticklabels = labels,
         **kwargs
     )
-    ax.set_xlabel('True', fontsize = 11)
-    ax.set_ylabel('Pred', fontsize = 11)
+    ax.set_xlabel('Pred', fontsize = 11)
+    ax.set_ylabel('True', fontsize = 11)
     ax.set_title('Confusion Matrix')
     plt.xticks(fontsize = 8, rotation = 45, ha = 'right')
     plt.yticks(fontsize = 8)
 
-    return fig, ax
+    return fig
