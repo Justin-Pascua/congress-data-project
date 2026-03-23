@@ -27,7 +27,7 @@ def train_step(model, optimizer,
     model.train()
 
     loss = 0.
-    metric_accumulator = MetricAccumulator(num_classes = 8)
+    metric_accumulator = MetricAccumulator(num_classes = model.num_labels)
     num_batches = len(train_dataloader)
     
     pbar = tqdm(total = num_batches, 
@@ -76,7 +76,7 @@ def eval_step(model,
     model.eval()
 
     loss = 0.
-    metric_accumulator = MetricAccumulator(num_classes = 8)
+    metric_accumulator = MetricAccumulator(num_classes = model.num_labels)
     num_batches = len(dataloader)
     
     pbar = tqdm(total = num_batches, 
