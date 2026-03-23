@@ -62,13 +62,15 @@ def read_bills(congress_num: int = None,
 
 def read_sponsorships(congress_num: int,
                       chambers: List[Literal['HR', 'S']] = None,
-                      start_date: datetime = None):
+                      start_date: datetime = None,
+                      end_date: datetime = None):
     """
     Pulls sponsorship items from bill_sponsorship table in local db.
     Args:
         congress_num: the number of the congress (e.g. 119) to filter by
         chambers: the chambers of congress to filter by
-        start_date: the datetime to filter by
+        start_date: the starting timestamp to filter by bill introduction date
+        end_date: the ending timestamp to filter by bill introduction date
     """
     with Session() as db:
         stmt = (select(BillSponsorship)
@@ -86,6 +88,6 @@ def read_sponsorships(congress_num: int,
                 (Bill.congress_num == BillSponsorship.congress_num) &
                 (Bill.bill_type == BillSponsorship.bill_type) &
                 (Bill.bill_num == BillSponsorship.bill_num)
-            ).where(Bill.introduced_date >= start_date)
+            ).where(start_date <= Bill.introduced_date).where(Bill.introduced_date <= end_date)
         result = db.scalars(stmt).all()
     return result

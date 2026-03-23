@@ -106,7 +106,7 @@ def strip_html_tags(text: str) -> str:
     
     return clean_text
     
-def process_bills(bills: List[Bill]) -> dict:
+def process_bills(bills: List[Bill]) -> pd.DataFrame:
     """
     Given a list of Bill objects from the database, returns a dataframe with cleaned summaries along with simplified and numerical labels.
     Args:
