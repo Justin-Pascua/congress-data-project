@@ -8,6 +8,7 @@ import yaml
 import dotenv
 from pathlib import Path
 
+from .model_selection import load_base, load_best_logged
 from .preprocessing import training_data_pipeline
 from ..utils.training import train_loop
 from ..utils.data import encoder
@@ -22,7 +23,7 @@ if __name__ == '__main__':
         config = yaml.safe_load(f)
     
     mlflow.set_tracking_uri("sqlite:///mlflow.db")
-    mlflow.set_experiment(config['mlflow']['experiment'])
+    current_experiment = mlflow.set_experiment(config['mlflow']['experiment'])
 
     with mlflow.start_run() as run:
         device = None
@@ -33,16 +34,19 @@ if __name__ == '__main__':
             device = torch.device("cpu")
             print("Using CPU")
         
-        tokenizer, model = None, None
         try:
-            checkpoint = config['model']['checkpoint']['finetuned']
-            tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-            model = AutoModelForSequenceClassification.from_pretrained(checkpoint)
+            load = load_best_logged(
+                experiment_id = current_experiment.experiment_id,
+                metrics = ['val_accuracy'],
+                ascending = [False]
+            )
         except:
-            checkpoint = config['model']['checkpoint']['base']
-            tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-            model = AutoModelForSequenceClassification.from_pretrained(checkpoint, num_labels = config['model']['num_labels'])
-        mlflow.set_tag("checkpoint_source", checkpoint)
+            load = load_base(
+                checkpoint = config['model']['checkpoint'],
+                num_labels = config['model']['num_labels']
+            )
+        tokenizer = load['tokenizer']
+        model = load['model']
         model = model.to(device)
 
         # training hyperparams (e.g. batch size, epochs, lr, etc.)
@@ -85,6 +89,7 @@ if __name__ == '__main__':
             device = device
         )
 
+        # end-of-run metrics
         mlflow.log_metrics(
             {f"final_train_{key}": value 
              for key, value in history['train'][-1].items() 
@@ -96,6 +101,7 @@ if __name__ == '__main__':
              if key != 'confusion_matrix'}
         )
     
+        # log artifacts
         labels = encoder.classes_
         train_cm = plot_cm(cm = history['train'][-1]['confusion_matrix'], 
                            labels = labels, normalize = 'true',
@@ -103,10 +109,8 @@ if __name__ == '__main__':
         val_cm = plot_cm(cm = history['val'][-1]['confusion_matrix'], 
                          labels = labels, normalize = 'true',
                          annot_kws = {'size': 7})
-
         mlflow.log_figure(train_cm, "train_cm.png")
         mlflow.log_figure(val_cm, "val_cm.png")
-
         mlflow.transformers.log_model(
             transformers_model={"model": model, "tokenizer": tokenizer},
             name = "model",

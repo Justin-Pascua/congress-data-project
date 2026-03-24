@@ -40,7 +40,7 @@ class MetricAccumulator:
 
         return {
             'accuracy':  accuracy,
-            'f1':        macro_precision,
+            'f1':        macro_f1,
             'precision': macro_precision,
             'recall':    macro_recall,
         }
