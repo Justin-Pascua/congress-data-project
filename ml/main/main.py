@@ -4,15 +4,18 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import transformers
 import mlflow
 
+import logging
 import yaml
 import dotenv
 from pathlib import Path
 
 from .model_selection import load_base, load_best_logged
 from .preprocessing import training_data_pipeline
-from ..utils.training import train_loop
+from ..utils.training import train_loop, eval
 from ..utils.data import encoder
 from ..utils.visualization import plot_cm
+
+logger = logging.getLogger(__name__)
 
 if __name__ == '__main__':
 
@@ -29,17 +32,27 @@ if __name__ == '__main__':
         device = None
         if torch.cuda.is_available():
             device = torch.device("cuda")
-            print(f"Using GPU: {torch.cuda.get_device_name(0)}") #
+            logger.info(f"Using GPU: {torch.cuda.get_device_name(0)}") #
         else:
             device = torch.device("cpu")
-            print("Using CPU")
+            logger.info("Using CPU")
         
+        # load model
+        load = None
+        # force_base indicates whether or not to train starting from base model
+        if config['model']['force_base']:
+            load = load_base(
+                checkpoint = config['model']['checkpoint'],
+                num_labels = config['model']['num_labels']
+            )
+        # if not force_base, then look for best logged model in MLflow.
         try:
             load = load_best_logged(
                 experiment_id = current_experiment.experiment_id,
-                metrics = ['val_accuracy'],
+                metrics = ['test_accuracy'],
                 ascending = [False]
             )
+        # If no models logged, then load base model
         except:
             load = load_base(
                 checkpoint = config['model']['checkpoint'],
@@ -88,18 +101,29 @@ if __name__ == '__main__':
             epochs = config['training']['epochs'],
             device = device
         )
+        test_metrics = eval(
+            model = model,
+            test_dataloader = dataloaders['test'],
+            device = device
+        )
 
         # end-of-run metrics
         mlflow.log_metrics(
-            {f"final_train_{key}": value 
+            {f"final_{key}": value 
              for key, value in history['train'][-1].items() 
              if key != 'confusion_matrix'}
         )
         mlflow.log_metrics(
-            {f"final_val_{key}": value 
+            {f"final_{key}": value 
              for key, value in history['val'][-1].items() 
              if key != 'confusion_matrix'}
         )
+        mlflow.log_metrics(
+            {f"final_{key}": value 
+             for key, value in test_metrics.items() 
+             if key != 'confusion_matrix'}
+        )
+
     
         # log artifacts
         labels = encoder.classes_
@@ -109,10 +133,29 @@ if __name__ == '__main__':
         val_cm = plot_cm(cm = history['val'][-1]['confusion_matrix'], 
                          labels = labels, normalize = 'true',
                          annot_kws = {'size': 7})
+        test_cm = plot_cm(cm = test_metrics['confusion_matrix'],
+                          labels = labels, normalize = 'true',
+                          annot_kws = {'size': 7})
         mlflow.log_figure(train_cm, "train_cm.png")
         mlflow.log_figure(val_cm, "val_cm.png")
-        mlflow.transformers.log_model(
-            transformers_model={"model": model, "tokenizer": tokenizer},
-            name = "model",
-            pip_requirements = ['torch', 'transformers']
-        )
+        mlflow.log_figure(test_cm, "test_cm.png")
+
+        # if first run, then log model
+        if 'metrics' not in load:
+            mlflow.transformers.log_model(
+                transformers_model = {"model": model, "tokenizer": tokenizer},
+                name = "model",
+                task = "text-classification",
+                pip_requirements = ['torch', 'transformers']
+            )
+        # otherwise, check if current model is better than best logged model
+        else:
+            current_test_acc = test_metrics.get('accuracy', 0.) 
+            best_test_acc = load['metrics'].get('test_accuracy', 0.)
+            if current_test_acc >= best_test_acc:
+                mlflow.transformers.log_model(
+                    transformers_model = {"model": model, "tokenizer": tokenizer},
+                    name = "model",
+                    task = "text-classification",
+                    pip_requirements = ['torch', 'transformers']
+                )

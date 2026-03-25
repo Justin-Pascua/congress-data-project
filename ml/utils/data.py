@@ -71,6 +71,8 @@ raw2simplified = {
     "Law": "Government & Law",
     "Labor and Employment": "Government & Law",
     "Private Legislation": "Government & Law",
+
+    None: None
 }
 
 def policy_area_simplifier(raw_policy_area: str) -> str:

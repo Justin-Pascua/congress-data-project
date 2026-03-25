@@ -28,11 +28,12 @@ def train_step(model, optimizer,
     model.train()
 
     loss = 0.
-    metric_accumulator = MetricAccumulator(num_classes = model.num_labels)
+    run_metrics = MetricAccumulator(num_classes = model.num_labels, metric_prefix = 'train')
+    batch_metrics = MetricAccumulator(num_classes = model.num_labels, metric_prefix = 'train')
     num_batches = len(train_dataloader)
     
     pbar = tqdm(total = num_batches, 
-                desc = 'Train Batch', 
+                desc = 'train batch', 
                 bar_format = '{desc:<12}: {n_fmt}/{total_fmt} {bar:20} {elapsed} {rate_fmt}{postfix}',
                 file = sys.stdout,
                 leave = True)
@@ -48,21 +49,25 @@ def train_step(model, optimizer,
 
         true = batch['labels'].cpu()
         pred = out.logits.argmax(dim = 1).cpu()
-        metric_accumulator.update(true, pred)
-        pbar.update(1)
+        run_metrics.update(true, pred)
+        
+        # log batch-specific metrics
+        batch_metrics.update(true, pred)
         mlflow.log_metrics(
-            {'train_loss': out.loss.item()} |
-            {f'train_{key}': value for key, value in metric_accumulator.compute().items()},
+            {'train_loss': out.loss.item()} | batch_metrics.compute(),
             step = step_offset + i
         )
+        batch_metrics.reset()
+
+        pbar.update(1)
         
         
-    full_metrics = {'loss': loss/num_batches} | metric_accumulator.compute()
+    full_metrics = {'loss': loss/num_batches} | run_metrics.compute()
     formatted_metrics = {key: f"{value:.3e}" for key, value in full_metrics.items()}
     pbar.set_postfix(formatted_metrics)
     pbar.close()
 
-    full_metrics = full_metrics | {'confusion_matrix': metric_accumulator.get_confusion_matrix()}
+    full_metrics = full_metrics | {'confusion_matrix': run_metrics.get_confusion_matrix()}
 
     return full_metrics
 
@@ -70,7 +75,8 @@ def eval_step(model,
               dataloader: DataLoader,
               device: torch.device = torch.device("cpu"),
               metric_prefix: str = 'val',
-              step_offset: int = 0) -> dict:
+              step_offset: int = 0,
+              log_to_mlflow: bool = True) -> dict:
     """
     Runs a single evaluation epoch over the provided dataloader.
 
@@ -80,15 +86,17 @@ def eval_step(model,
         device: a `torch.device` specifying which device to run on.
         metric_prefix: prefix applied to metric names when logging to MLflow
         step_offset: an `int` added to each batch index when logging to MLflow, used to produce globally unique step values across epochs.
+        log_to_mlflow: a `bool` indicating whether to log batch-based metrics to mlflow
     """
     model.eval()
 
     loss = 0.
-    metric_accumulator = MetricAccumulator(num_classes = model.num_labels)
+    run_metrics = MetricAccumulator(num_classes = model.num_labels, metric_prefix = metric_prefix)
+    batch_metrics = MetricAccumulator(num_classes = model.num_labels, metric_prefix = metric_prefix)
     num_batches = len(dataloader)
     
     pbar = tqdm(total = num_batches, 
-                desc = 'Val Batch', 
+                desc = f'{metric_prefix} batch', 
                 bar_format = '{desc:<12}: {n_fmt}/{total_fmt} {bar:20} {elapsed} {rate_fmt}{postfix}',
                 file = sys.stdout,
                 leave = True)
@@ -102,20 +110,25 @@ def eval_step(model,
 
             true = batch['labels'].cpu()
             pred = out.logits.argmax(dim = 1).cpu()
-            metric_accumulator.update(true, pred)
-            pbar.update(1)
-            mlflow.log_metrics(
-                {f'{metric_prefix}_loss': out.loss.item()} |
-                {f'{metric_prefix}_{key}': value for key, value in metric_accumulator.compute().items()},
-                step = step_offset + i
-            )
+            run_metrics.update(true, pred)
+            
+            # log batch-specific metrics
+            if log_to_mlflow:
+                batch_metrics.update(true, pred)
+                mlflow.log_metrics(
+                    {f'{metric_prefix}_loss': out.loss.item()} | batch_metrics.compute(),
+                    step = step_offset + i
+                )
+                batch_metrics.reset()
 
-    full_metrics = {'loss': loss/num_batches} | metric_accumulator.compute()
-    formatted_metrics = {key: f"{value:.3e}" for key, value in full_metrics.items()}
+            pbar.update(1)
+
+    full_metrics = {'loss': loss/num_batches} | run_metrics.compute()
+    formatted_metrics = {f"{metric_prefix}_{key}": f"{value:.3e}" for key, value in full_metrics.items()}
     pbar.set_postfix(formatted_metrics)
     pbar.close()
 
-    full_metrics = full_metrics | {'confusion_matrix': metric_accumulator.get_confusion_matrix()}
+    full_metrics = full_metrics | {'confusion_matrix': run_metrics.get_confusion_matrix()}
 
     return full_metrics
 
@@ -167,3 +180,17 @@ def train_loop(model, optimizer,
     end = time.perf_counter()
     logger.info(f"Training loop finished ({timedelta(seconds = int(end - start))})")
     return history
+
+def eval(model, 
+         test_dataloader: DataLoader,
+         device: torch.device = torch.device("cpu"),
+         ) -> dict:
+    """
+    Computes evaluation metrics on a test dataset.
+    Args:
+        model: The model to be evaluated.
+        dataloader: a `Dataloader` providing validation batches.
+        device: a `torch.device` specifying which device to run on.
+    """
+    metrics = eval_step(model, test_dataloader, device, metric_prefix = 'test', log_to_mlflow = False)
+    return metrics

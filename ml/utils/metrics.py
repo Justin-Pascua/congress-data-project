@@ -2,8 +2,9 @@ import numpy as np
 from typing import Literal, List, Optional
 
 class MetricAccumulator:
-    def __init__(self, num_classes: int):
+    def __init__(self, num_classes: int, metric_prefix: str = None):
         self.num_classes = num_classes
+        self.metric_prefix = metric_prefix
 
         # confusion_matrix[i, j] = num samples of true class i predicted as class j
         self.confusion_matrix = np.zeros((num_classes, num_classes), dtype = np.int64)
@@ -39,10 +40,10 @@ class MetricAccumulator:
         macro_f1 = f1.mean()
 
         return {
-            'accuracy':  accuracy,
-            'f1':        macro_f1,
-            'precision': macro_precision,
-            'recall':    macro_recall,
+            f'{self.metric_prefix}_accuracy':  accuracy,
+            f'{self.metric_prefix}_f1':        macro_f1,
+            f'{self.metric_prefix}_precision': macro_precision,
+            f'{self.metric_prefix}_recall':    macro_recall,
         }
 
     def reset(self) -> None:
@@ -73,3 +74,4 @@ class MetricAccumulator:
             case _: raise ValueError(f"normalize must be 'true', 'pred', 'all', or None. Got '{normalize}'")
         
         return cm / np.maximum(denom, 1)
+
