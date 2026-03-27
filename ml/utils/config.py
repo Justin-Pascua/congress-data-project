@@ -7,6 +7,7 @@ class MLflowConfig(BaseModel):
     MLflow tracking configuration. 
     """
     experiment: str
+    labels_simplified: bool  # indicates if original classes have been grouped into broader classes
 
 class ModelConfig(BaseModel):
     """
@@ -57,9 +58,10 @@ class Config(BaseModel):
 
         mlflow:
           experiment: my-experiment-name
+          simplified_labels: False
 
         model:
-          num_labels: 2
+          num_labels: 33
           checkpoint: "distilbert/distilroberta-base"
           force_base: True
 

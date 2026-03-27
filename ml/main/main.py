@@ -9,10 +9,10 @@ import yaml
 import dotenv
 from pathlib import Path
 
-from .model_selection import load_base, load_best_logged
+from .model_selection import load_model, ModelSource
 from .preprocessing import training_data_pipeline
 from ..utils.training import train_loop, eval
-from ..utils.data import encoder
+from ..utils.data import raw_encoder, simplified_encoder
 from ..utils.visualization import plot_cm
 from ..utils.config import Config
 
@@ -40,36 +40,26 @@ if __name__ == '__main__':
             logger.info("Using CPU")
         
         # load model
-        load = None
-        # force_base indicates whether or not to train starting from base model
-        if config.model.force_base:
-            load = load_base(
-                checkpoint = config.model.checkpoint,
-                num_labels = config.model.num_labels
-            )
-        # if not force_base, then look for best logged model in MLflow.
-        else:
-            try:
-                load = load_best_logged(
-                    experiment_id = current_experiment.experiment_id,
-                    metrics = ['test_accuracy'],
-                    ascending = [False]
-                )
-            # If no models logged, then load base model
-            except:
-                load = load_base(
-                    checkpoint = config.model.checkpoint,
-                    num_labels = config.model.num_labels
-                )
-        tokenizer = load['tokenizer']
-        model = load['model']
+        load = load_model(
+            experiment_id = current_experiment.experiment_id,
+            force_base = config.model.force_base,
+            checkpoint = config.model.checkpoint,
+            num_labels = config.model.num_labels
+        )
+        tokenizer = load.tokenizer
+        model = load.model
+        model_source = load.source
         model = model.to(device)
+
+        # tag to indicate if classifying simplified labels or raw labels
+        mlflow.set_tag("labels-simplified", f"{config.mlflow.labels_simplified}")
 
         # training hyperparams (e.g. batch size, epochs, lr, etc.)
         mlflow.log_params(config.training.model_dump())
 
         dataloaders = training_data_pipeline(
             tokenizer = tokenizer, 
+            simplify = config.mlflow.labels_simplified,
             train_start_date = config.dataset.train.start_date, 
             train_end_date = config.dataset.train.end_date,
             test_start_date = config.dataset.test.start_date,
@@ -128,23 +118,38 @@ if __name__ == '__main__':
         )
 
 
-        # log artifacts
-        labels = encoder.classes_
-        train_cm = plot_cm(cm = history['train'][-1]['confusion_matrix'], 
-                            labels = labels, normalize = 'true',
-                            annot_kws = {'size': 7})
-        val_cm = plot_cm(cm = history['val'][-1]['confusion_matrix'], 
-                            labels = labels, normalize = 'true',
-                            annot_kws = {'size': 7})
-        test_cm = plot_cm(cm = test_metrics['confusion_matrix'],
-                            labels = labels, normalize = 'true',
-                            annot_kws = {'size': 7})
+        # log plots
+        labels = (simplified_encoder.classes_ if config.mlflow.labels_simplified
+                  else raw_encoder.classes_)
+        figsize = (8, 8) if config.mlflow.labels_simplified else (18, 18)
+        fontsize = 9 if config.mlflow.labels_simplified else 6
+        train_cm = plot_cm(
+            cm = history['train'][-1]['confusion_matrix'], 
+            labels = labels, 
+            normalize = 'true',
+            figsize = figsize,
+            fontsize = fontsize
+        )
+        val_cm = plot_cm(
+            cm = history['val'][-1]['confusion_matrix'], 
+            labels = labels, 
+            normalize = 'true',
+            figsize = figsize,
+            fontsize = fontsize
+        )
+        test_cm = plot_cm(
+            cm = test_metrics['confusion_matrix'],
+            labels = labels, 
+            normalize = 'true',
+            figsize = figsize,
+            fontsize = fontsize
+        )
         mlflow.log_figure(train_cm, "train_cm.png")
         mlflow.log_figure(val_cm, "val_cm.png")
         mlflow.log_figure(test_cm, "test_cm.png")
 
-        # if first run, then log model
-        if 'metrics' not in load:
+        # if training from base, then log model
+        if load.source == ModelSource.BASE:
             mlflow.transformers.log_model(
                 transformers_model = {"model": model, "tokenizer": tokenizer},
                 name = "model",
@@ -154,7 +159,7 @@ if __name__ == '__main__':
         # otherwise, check if current model is better than best logged model
         else:
             current_test_acc = test_metrics.get('accuracy', 0.) 
-            best_test_acc = load['metrics'].get('test_accuracy', 0.)
+            best_test_acc = load.metrics.get('test_accuracy', 0.)
             if current_test_acc >= best_test_acc:
                 mlflow.transformers.log_model(
                     transformers_model = {"model": model, "tokenizer": tokenizer},

@@ -8,6 +8,7 @@ from database.read import read_bills
 from ..utils.data import process_bills, BillDataset, get_dataloader
 
 def training_data_pipeline(tokenizer, 
+                           simplify: bool,
                            train_start_date: datetime, train_end_date: datetime, 
                            test_start_date: datetime, test_end_date: datetime = datetime.now(),
                            val_frac: float = 0.2,
@@ -22,6 +23,8 @@ def training_data_pipeline(tokenizer,
 
     Args:
         tokenizer: HuggingFace tokenizer used to tokenize and pad sequences within each batch.
+        simplify: if `True`, then bill policy areas will be binned into 8 possible classes (as opposed to the original 33).
+            If `False`, then the policy areas are left as is. 
         train_start_date: start date for querying training bills (inclusive).
         train_end_date: end date for querying training bills (inclusive).
         test_start_date: start date for querying test bills (inclusive).
@@ -51,9 +54,9 @@ def training_data_pipeline(tokenizer,
         start_date = test_start_date,
         end_date = test_end_date)
     
-    train_df = process_bills(train_bills)
-    val_df = process_bills(val_bills)
-    test_df = process_bills(test_bills)
+    train_df = process_bills(train_bills, simplify)
+    val_df = process_bills(val_bills, simplify)
+    test_df = process_bills(test_bills, simplify)
 
     train_dataset = BillDataset(train_df, 'summary', 'numericalLabel')
     val_dataset = BillDataset(val_df, 'summary', 'numericalLabel')

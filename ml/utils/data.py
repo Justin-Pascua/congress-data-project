@@ -71,8 +71,6 @@ raw2simplified = {
     "Law": "Government & Law",
     "Labor and Employment": "Government & Law",
     "Private Legislation": "Government & Law",
-
-    None: None
 }
 
 def policy_area_simplifier(raw_policy_area: str) -> str:
@@ -84,12 +82,15 @@ def policy_area_simplifier(raw_policy_area: str) -> str:
     try:
         return raw2simplified[raw_policy_area]
     except:
-        return "Other"
+        return None
 
-possible_labels = list(set(raw2simplified.values())) + ["Other"]
+possible_raw_labels = list(set(raw2simplified.keys()))
+raw_encoder = LabelEncoder()
+raw_encoder.fit(possible_raw_labels)
 
-encoder = LabelEncoder()
-encoder.fit(possible_labels)
+possible_simplified_labels = list(set(raw2simplified.values()))
+simplified_encoder = LabelEncoder()
+simplified_encoder.fit(possible_simplified_labels)
 
 def strip_html_tags(text: str) -> str:
     """
@@ -108,19 +109,28 @@ def strip_html_tags(text: str) -> str:
     
     return clean_text
     
-def process_bills(bills: List[Bill]) -> pd.DataFrame:
+def process_bills(bills: List[Bill], simplify: bool) -> pd.DataFrame:
     """
-    Given a list of Bill objects from the database, returns a dataframe with cleaned summaries along with simplified and numerical labels.
+    Given a list of Bill objects from the database, returns a dataframe with cleaned summaries and labels (both text and numerical).
     Args:
         bills: a list of `database.models.Bill` objects.
+        simplify: if `True`, then bill policy areas will be binned into 8 possible classes (as opposed to the original 33).
+        If `False`, then the policy areas are left as is. 
     """
     summaries = [strip_html_tags(bill.summary) for bill in bills]
-    labels = [policy_area_simplifier(bill.policy_area) for bill in bills]
+    labels = None
+    if simplify:
+        labels = [policy_area_simplifier(bill.policy_area) for bill in bills]
+    else:
+        labels = [bill.policy_area for bill in bills]
 
     df = pd.DataFrame(list(zip(summaries, labels)), columns = ['summary', 'label'])
     df = df.dropna().reset_index(drop = True)
     
-    df['numericalLabel'] = encoder.transform(df['label'])
+    if simplify:
+        df['numericalLabel'] = simplified_encoder.transform(df['label'])
+    else:
+        df['numericalLabel'] = raw_encoder.transform(df['label'])
     
     return df
 

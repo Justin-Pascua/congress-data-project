@@ -21,32 +21,41 @@ def normalize_cm(cm: np.ndarray, mode: Literal['true', 'pred', 'all']):
         
     return cm / np.maximum(denom, 1)
 
-def plot_cm(cm: np.ndarray, labels: List[str], normalize: Literal['true', 'pred', 'all'] = None, **kwargs):
+def plot_cm(cm: np.ndarray, labels: List[str], normalize: Literal['true', 'pred', 'all'] = None, 
+            figsize: tuple = (8, 8), fontsize: int = 9,
+            **kwargs):
     """
     Plots a confusion matrix using the provided labels.
     Args:
         cm: the confusion matrix to be plotted
         labels: a list of string srepresenting the class labels
-        normalize: an optional string indicating how to normalize the confusion matrix. If `None`, then the matrix is left as is.
+        normalize: an optional string indicating how to normalize the confusion matrix. If `None`, then the matrix is left as is
+        figsize: the size of the figure
+        fontsize: the size of the xticklabels, yticklabels, and annotations within the cells of the matrix
     """
     if normalize is not None:
         cm = normalize_cm(cm, normalize)
-    
+
     cm = np.round(cm, 3)
-    fig, ax = plt.subplots(figsize = (7, 7))
-        
+    
+    # Create figure and explicitly set size
+    plt.figure(figsize = figsize)
+    
     sns.heatmap(
         cm,
-        annot = True,
-        xticklabels = labels,
-        yticklabels = labels,
+        annot=True,
+        xticklabels=labels,
+        yticklabels=labels,
+        vmin = 0,
+        vmax = 1,
+        annot_kws = {'size': fontsize},
         **kwargs
     )
-    ax.set_xlabel('Pred', fontsize = 11)
-    ax.set_ylabel('True', fontsize = 11)
-    ax.set_title('Confusion Matrix')
-    fig.tight_layout()
-    plt.xticks(fontsize = 8, rotation = 45, ha = 'right')
-    plt.yticks(fontsize = 8)
+    plt.title('Confusion Matrix', fontsize = 16)
+    plt.xlabel('Pred', fontsize = 11)
+    plt.ylabel('True', fontsize = 11)
+    plt.xticks(fontsize = fontsize, rotation = -90, ha = 'right')
+    plt.yticks(fontsize = fontsize)
+    plt.tight_layout()
 
-    return fig
+    return plt.gcf()
