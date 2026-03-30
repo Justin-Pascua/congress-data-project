@@ -64,6 +64,7 @@ if __name__ == '__main__':
             train_end_date = config.dataset.train.end_date,
             test_start_date = config.dataset.test.start_date,
             test_end_date = config.dataset.test.end_date,
+            weighted_sampling = config.dataset.train.weighted_sampling,
             val_frac = config.dataset.train.val_frac,
             max_length = config.training.max_length,
             batch_size = config.training.batch_size
@@ -74,6 +75,7 @@ if __name__ == '__main__':
             'train_start_date': config.dataset.train.start_date,
             'train_end_date': config.dataset.train.end_date,
             'val_frac': config.dataset.train.val_frac,
+            'weighted_sampling': config.dataset.train.weighted_sampling,
             'test_start_date': config.dataset.test.start_date,
             'test_end_date': config.dataset.test.end_date,
             'train_size': len(dataloaders['train'].dataset),

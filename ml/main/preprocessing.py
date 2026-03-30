@@ -11,6 +11,7 @@ def training_data_pipeline(tokenizer,
                            simplify: bool,
                            train_start_date: datetime, train_end_date: datetime, 
                            test_start_date: datetime, test_end_date: datetime = datetime.now(),
+                           weighted_sampling: bool = False,
                            val_frac: float = 0.2,
                            max_length: int = None,
                            **kwargs):
@@ -29,6 +30,8 @@ def training_data_pipeline(tokenizer,
         train_end_date: end date for querying training bills (inclusive).
         test_start_date: start date for querying test bills (inclusive).
         test_end_date: end date for querying test bills (inclusive). Defaults to now.
+        weighted_sampling: if `True`, then the `DataLoader` for the training set is 
+            created with a `WeightedRandomSampler` weighted by reciprocal of class counts
         val_frac: fraction of the training pool to reserve for validation. Defaults to 0.2.
         max_length: maximum token length for truncating sequences. If None, no truncation is applied.
         **kwargs: additional keyword arguments forwarded to get_dataloader (e.g. batch_size, num_workers).
@@ -62,7 +65,7 @@ def training_data_pipeline(tokenizer,
     val_dataset = BillDataset(val_df, 'summary', 'numericalLabel')
     test_dataset = BillDataset(test_df, 'summary', 'numericalLabel')
 
-    train_dataloader = get_dataloader(train_dataset, tokenizer, max_length, **kwargs)
+    train_dataloader = get_dataloader(train_dataset, tokenizer, max_length, weighted_sampling, **kwargs)
     val_dataloader = get_dataloader(val_dataset, tokenizer, max_length, **kwargs)
     test_dataloader = get_dataloader(test_dataset, tokenizer, max_length, **kwargs)
 

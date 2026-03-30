@@ -76,7 +76,3 @@ def load_model(experiment_id: str = None,
                 num_labels = num_labels
             )
     return load
-
-def compare(best_metrics, current_metrics, criteria):
-    pass
-

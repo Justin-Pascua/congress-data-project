@@ -17,7 +17,6 @@ class ModelConfig(BaseModel):
     checkpoint: str     # HuggingFace checkpoint of base model
     num_labels: int     # number of classes in the classification task
 
-
 class TrainingConfig(BaseModel):
     """
     Hyperparameters and training loop configuration.
@@ -35,6 +34,7 @@ class TrainDatasetConfig(BaseModel):
     start_date: datetime | date   # dates specify date range to pull samples from
     end_date: datetime | date
     val_frac: float               # specifies what fraction of data to use for validation
+    weighted_sampling: bool
 
 class TestDatasetConfig(BaseModel):
     """

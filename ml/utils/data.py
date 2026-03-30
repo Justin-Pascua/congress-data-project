@@ -1,5 +1,5 @@
 import torch
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
 
@@ -154,18 +154,31 @@ def make_collate_fn(tokenizer, max_length: int = None):
 
     return collate_fn
 
-def get_dataloader(dataset: BillDataset, tokenizer, max_length: int = None, **kwargs) -> DataLoader:
+def get_dataloader(dataset: BillDataset, tokenizer, max_length: int = None, weighted_sampling: bool = False, **kwargs) -> DataLoader:
     """
     Returns a torch `DataLoader` equipped with a collate_fn as returned by `make_collate_fn`.
     Args:
         dataset: a `BillDataset` object.
         tokenizer: a HuggingFace tokenizer passed to `make_collate_fn` to construct the collate_fn passed to the `DataLoader` constructor.
         max_length: int passed to tokenizer to determine max token length of sequences. 
+        weighted: if `True`, then creates the `DataLoader` with a `WeightedRandomSampler` weighted by reciprocal of class counts
     """
-    
+
+    sampler = None    
+    if weighted_sampling:
+        class_counts = dataset.y.value_counts().sort_index()
+        class_weights = 1/class_counts
+        sample_weights = dataset.y.map(class_weights).values
+        sampler = WeightedRandomSampler(
+            weights = sample_weights,
+            num_samples = len(dataset),
+            replacement = True
+        )
+
     dataloader = DataLoader(
         dataset, 
         collate_fn = make_collate_fn(tokenizer, max_length),
+        sampler = sampler,
         **kwargs
     )
     return dataloader
