@@ -15,7 +15,8 @@ airflow/config/
 docker-compose.yaml
 
 mlflow.db
-ml/main/config.yaml
+ml/main/train-config.yaml
+ml/main/eval-config.yaml
 mlruns/
 
 dev_utils/

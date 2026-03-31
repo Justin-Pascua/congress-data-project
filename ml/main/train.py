@@ -1,22 +1,17 @@
 import torch
-import torch.nn as nn
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import transformers
 import mlflow
 
 import logging
 import yaml
 import dotenv
-from pathlib import Path
 
 from .model_selection import load_model, ModelSource
 from .preprocessing import training_data_pipeline
-from ..utils.training import train_loop, eval
+from ..utils.train_eval import train_loop, eval
 from ..utils.data import raw_encoder, simplified_encoder
 from ..utils.visualization import plot_cm
-from ..utils.config import Config
-
-logger = logging.getLogger(__name__)
+from ..utils.config import TrainConfig
 
 if __name__ == '__main__':
 
@@ -24,13 +19,16 @@ if __name__ == '__main__':
     transformers.logging.set_verbosity_error()
     logger = logging.getLogger(__name__)
 
-    with open("./ml/main/config.yaml", "r") as f:
-        config = Config(yaml.safe_load(f))
+    with open("./ml/main/train-config.yaml", "r") as f:
+        config = TrainConfig(yaml.safe_load(f))
 
     mlflow.set_tracking_uri("sqlite:///mlflow.db")
     current_experiment = mlflow.set_experiment(config.mlflow.experiment)
 
-    with mlflow.start_run() as run:
+    with mlflow.start_run(
+        tags = {'mode': 'train',
+                "labels-simplified": f"{config.mlflow.labels_simplified}"}
+    ) as run:
         device = None
         if torch.cuda.is_available():
             device = torch.device("cuda")
@@ -48,11 +46,11 @@ if __name__ == '__main__':
         )
         tokenizer = load.tokenizer
         model = load.model
-        model_source = load.source
         model = model.to(device)
-
-        # tag to indicate if classifying simplified labels or raw labels
-        mlflow.set_tag("labels-simplified", f"{config.mlflow.labels_simplified}")
+        if load.source == ModelSource.BASE:
+            mlflow.set_tag("source", "base")
+        else:
+            mlflow.set_tag("source", load.model_id)
 
         # training hyperparams (e.g. batch size, epochs, lr, etc.)
         mlflow.log_params(config.training.model_dump())

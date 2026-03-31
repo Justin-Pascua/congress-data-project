@@ -1,6 +1,5 @@
-import pandas as pd
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import LabelEncoder
+from torch.utils.data import DataLoader
 
 from datetime import datetime
 
@@ -14,7 +13,7 @@ def training_data_pipeline(tokenizer,
                            weighted_sampling: bool = False,
                            val_frac: float = 0.2,
                            max_length: int = None,
-                           **kwargs):
+                           **kwargs) -> dict:
     """
     Pulls bill records from the database and constructs train, validation, and
     test DataLoaders using date-based splits to prevent data contamination.
@@ -72,3 +71,34 @@ def training_data_pipeline(tokenizer,
     return {'train': train_dataloader,
             'val': val_dataloader,
             'test': test_dataloader}
+
+def eval_data_pipeline(tokenizer, 
+                       simplify: bool,
+                       test_start_date: datetime, test_end_date: datetime = datetime.now(),
+                       **kwargs) -> DataLoader:
+    """
+    Pulls bill records from the database and constructs a DataLoader to be used for evaluation.
+
+    Args:
+        tokenizer: HuggingFace tokenizer used to tokenize and pad sequences within each batch.
+        simplify: if `True`, then bill policy areas will be binned into 8 possible classes (as opposed to the original 33).
+            If `False`, then the policy areas are left as is. 
+        test_start_date: start date for querying test bills (inclusive).
+        test_end_date: end date for querying test bills (inclusive). Defaults to now.
+        max_length: maximum token length for truncating sequences. If None, no truncation is applied.
+        **kwargs: additional keyword arguments forwarded to get_dataloader (e.g. batch_size, num_workers).
+    """
+    if test_end_date is not None:
+        if test_start_date > test_end_date:
+            raise ValueError('test_start_date should be <= test_end_date')
+     
+    test_bills = read_bills(
+        start_date = test_start_date,
+        end_date = test_end_date)
+    test_df = process_bills(test_bills, simplify)
+
+    test_dataset = BillDataset(test_df, 'summary', 'numericalLabel')
+
+    test_dataloader = get_dataloader(test_dataset, tokenizer, **kwargs)
+
+    return test_dataloader

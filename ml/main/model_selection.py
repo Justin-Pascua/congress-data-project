@@ -16,7 +16,20 @@ class ModelLoad:
     model: Any
     tokenizer: Any
     source: ModelSource
+    model_id: Optional[str] = None
     metrics: Optional[dict] = None
+
+def load_logged(experiment_id: str, model_id: str) -> ModelLoad:
+    components = mlflow.transformers.load_model(
+        model_uri = f"mlruns/{experiment_id}/models/{model_id}/artifacts/",
+        return_type = "components"
+    )
+    return ModelLoad(
+        model = components['model'],
+        tokenizer = components['tokenizer'],
+        source = ModelSource.LOGGED,
+        model_id = model_id
+    )
 
 def load_best_logged(experiment_id: str, metrics: List[dict]) -> ModelLoad:
     sorted_models = mlflow.search_logged_models(
@@ -34,7 +47,9 @@ def load_best_logged(experiment_id: str, metrics: List[dict]) -> ModelLoad:
         model =  components['model'],
         tokenizer = components['tokenizer'],
         source = ModelSource.LOGGED,
-        metrics = metrics)
+        model_id = best_model["model_id"],
+        metrics = metrics
+    )
 
 def load_base(checkpoint: str, num_labels: int) -> dict:
     tokenizer = AutoTokenizer.from_pretrained(checkpoint)
@@ -43,9 +58,11 @@ def load_base(checkpoint: str, num_labels: int) -> dict:
     return ModelLoad(
         model =  model,
         tokenizer = tokenizer,
-        source = ModelSource.BASE,)
+        source = ModelSource.BASE
+    )
 
 def load_model(experiment_id: str = None,
+               model_id: str = None,
                force_base: bool = False, 
                checkpoint: str = None, num_labels: int = None) -> ModelLoad:
     # if need to load base model
@@ -61,6 +78,11 @@ def load_model(experiment_id: str = None,
         load = load_base(
             checkpoint = checkpoint,
             num_labels = num_labels
+        )
+    elif model_id is not None:
+        load = load_logged(
+            experiment_id = experiment_id,
+            model_id = model_id
         )
     # if not force_base, then look for best logged model in MLflow.
     else:
