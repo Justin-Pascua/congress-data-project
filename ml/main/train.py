@@ -5,6 +5,7 @@ import mlflow
 import logging
 import yaml
 import dotenv
+import os
 
 from .model_selection import load_model, ModelSource
 from .preprocessing import training_data_pipeline
@@ -13,16 +14,17 @@ from ..utils.data import raw_encoder, simplified_encoder
 from ..utils.visualization import plot_cm
 from ..utils.config import TrainConfig
 
-if __name__ == '__main__':
-
+def train_main(config: TrainConfig):
+    """
+    Trains model, and evaluates on a validation and test set.
+    Args:
+        config: a `TrainConfig` object containing config details
+    """
     dotenv.load_dotenv()
     transformers.logging.set_verbosity_error()
     logger = logging.getLogger(__name__)
 
-    with open("./ml/main/train-config.yaml", "r") as f:
-        config = TrainConfig(yaml.safe_load(f))
-
-    mlflow.set_tracking_uri("sqlite:///mlflow.db")
+    mlflow.set_tracking_uri(os.getenv('MLFLOW_TRACKING_URI'))
     current_experiment = mlflow.set_experiment(config.mlflow.experiment)
 
     with mlflow.start_run(
@@ -167,3 +169,9 @@ if __name__ == '__main__':
                     task = "text-classification",
                     pip_requirements = ['torch', 'transformers']
                 )
+
+if __name__ == '__main__':
+    with open("./ml/main/train-config.yaml", "r") as f:
+        config = TrainConfig(yaml.safe_load(f))
+
+    train_main(config)    

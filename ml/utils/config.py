@@ -2,30 +2,30 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, date
 
-class MLflowConfig(BaseModel):
+class TrainMLflowConfig(BaseModel):
     """
-    MLflow tracking configuration. 
+    MLflow tracking configuration for training 
     """
     experiment: str
     labels_simplified: bool  # indicates if original classes have been grouped into broader classes
 
-class ModelConfigBase(BaseModel):
+class EvalMLflowConfig(BaseModel):
     """
-    Shared model fields in both train and eval configs
+    MLflow tracking configuration for evaluation
+    """
+    experiment: str
+
+class TrainModelConfig(BaseModel):
+    """
+    Model config for training.
     """
     checkpoint: str     # HuggingFace checkpoint of base model
-    num_labels: int     # number of classes in the classification task
-class TrainModelConfig(ModelConfigBase):
-    """
-    Model config for training. Adds force_base to control whether to resume from 
-    a previously logged MLflow model or start from base checkpoint.
-    """
+    num_labels: int     # number of classes in the classification tas
     force_base: bool    # If True, then loads base model. If False, then loads best model logged in MLflow (or base model if no models logged in MLflow) 
     
-class EvalModelConfig(ModelConfigBase):
+class EvalModelConfig(BaseModel):
     """
-    Model config for evaluation. Adds model_id to pin a specific MLflow run;
-    if None, the best logged model is loaded instead.
+    Model config for evaluation.
     """
     model_id: Optional[str] = None  # MLflow run/model ID to load; defaults to best model if omitted
 
@@ -101,7 +101,7 @@ class TrainConfig(BaseModel):
         with open("config.yaml") as f:
             cfg = Config(yaml.safe_load(f))
     """
-    mlflow: MLflowConfig
+    mlflow: TrainMLflowConfig
     model: TrainModelConfig
     training: TrainingConfig
     dataset: DatasetConfig
@@ -111,7 +111,7 @@ class TrainConfig(BaseModel):
         Args:
             yaml_dict: dict as returned by yaml.safe_load.
         """
-        mlflow_config = MLflowConfig(**yaml_dict['mlflow'])
+        mlflow_config = TrainMLflowConfig(**yaml_dict['mlflow'])
         model_config = TrainModelConfig(**yaml_dict['model'])
         training_config = TrainingConfig(**yaml_dict['training'])
         dataset_config = DatasetConfig(
@@ -133,11 +133,8 @@ class EvalConfig(BaseModel):
 
         mlflow:
           experiment: congress-bill-classifier
-          labels_simplified: False
-
+          
         model:
-          num_labels: 33
-          checkpoint: "distilbert/distilroberta-base"
           model_id:         # optional; omit or leave blank to load best model
 
         dataset:
@@ -153,13 +150,13 @@ class EvalConfig(BaseModel):
         with open("eval-config.yaml") as f:
             cfg = EvalConfig(yaml.safe_load(f))
     """
-    mlflow: MLflowConfig
+    mlflow: EvalMLflowConfig
     model: EvalModelConfig
     dataset: DatasetConfig
 
     def __init__(self, yaml_dict: dict):
         super().__init__(
-            mlflow = MLflowConfig(**yaml_dict["mlflow"]),
+            mlflow = EvalMLflowConfig(**yaml_dict["mlflow"]),
             model = EvalModelConfig(**yaml_dict["model"]),
             dataset = DatasetConfig(
                 test = TestDatasetConfig(**yaml_dict["dataset"]["test"]),

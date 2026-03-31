@@ -1,6 +1,6 @@
 import mlflow
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
-from typing import List, Any, Optional
+from typing import List, Any, Optional, Literal
 from dataclasses import dataclass
 from enum import Enum, auto
 
@@ -61,7 +61,8 @@ def load_base(checkpoint: str, num_labels: int) -> dict:
         source = ModelSource.BASE
     )
 
-def load_model(experiment_id: str = None,
+def load_model(eval_mode: bool = False,
+               experiment_id: str = None,
                model_id: str = None,
                force_base: bool = False, 
                checkpoint: str = None, num_labels: int = None) -> ModelLoad:
@@ -75,6 +76,8 @@ def load_model(experiment_id: str = None,
     load = None
     # force_base indicates whether or not to train starting from base model
     if force_base:
+        if eval_mode:
+            raise ValueError("Tried to load base model in eval mode")
         load = load_base(
             checkpoint = checkpoint,
             num_labels = num_labels
@@ -92,7 +95,9 @@ def load_model(experiment_id: str = None,
                 metrics = ['test_accuracy']
             )
         # If no models logged, then load base model
-        except:
+        except:            
+            if eval_mode:
+                raise ValueError("Tried to load base model in eval mode")
             load = load_base(
                 checkpoint = checkpoint,
                 num_labels = num_labels
