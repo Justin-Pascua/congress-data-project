@@ -2,18 +2,23 @@ from pydantic import BaseModel
 from typing import Optional
 from datetime import datetime, date
 
-class TrainMLflowConfig(BaseModel):
+class MLflowConfigBase(BaseModel):
+    """
+    MLflow tracking configuration 
+    """
+    experiment: str
+    description: Optional[str] = None   # description given to run
+
+class TrainMLflowConfig(MLflowConfigBase):
     """
     MLflow tracking configuration for training 
     """
-    experiment: str
     labels_simplified: bool  # indicates if original classes have been grouped into broader classes
 
-class EvalMLflowConfig(BaseModel):
+class EvalMLflowConfig(MLflowConfigBase):
     """
     MLflow tracking configuration for evaluation
     """
-    experiment: str
 
 class TrainModelConfig(BaseModel):
     """

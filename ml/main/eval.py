@@ -29,7 +29,10 @@ def eval_main(config: EvalConfig):
     mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI"))
     current_experiment = mlflow.set_experiment(config.mlflow.experiment)
 
-    with mlflow.start_run(tags = {'mode': 'eval'}):
+    with mlflow.start_run(
+        tags = {'mode': 'eval'},
+        description = config.mlflow.description
+    ) as run:
         device = None
         if torch.cuda.is_available():
             device = torch.device("cuda")
@@ -97,8 +100,7 @@ def eval_main(config: EvalConfig):
         )
         mlflow.log_figure(test_cm, "test_cm.png")
 
-        return {'metrics': metrics_formatted,
-                'plot': test_cm}
+        return run.info.run_id
 
 if __name__ == '__main__':
     with open("./ml/main/eval-config.yaml", "r") as f:

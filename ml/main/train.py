@@ -29,7 +29,8 @@ def train_main(config: TrainConfig):
 
     with mlflow.start_run(
         tags = {'mode': 'train',
-                "labels-simplified": f"{config.mlflow.labels_simplified}"}
+                "labels-simplified": f"{config.mlflow.labels_simplified}"},
+        description = config.mlflow.description
     ) as run:
         device = None
         if torch.cuda.is_available():
@@ -170,8 +171,10 @@ def train_main(config: TrainConfig):
                     pip_requirements = ['torch', 'transformers']
                 )
 
+    return run.info.run_id
+
 if __name__ == '__main__':
     with open("./ml/main/train-config.yaml", "r") as f:
         config = TrainConfig(yaml.safe_load(f))
 
-    train_main(config)    
+    train_main(config)
