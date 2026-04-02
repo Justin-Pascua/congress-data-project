@@ -43,16 +43,18 @@ def eval_main(config: EvalConfig):
         
         # load model
         load = load_model(
+            eval_mode = True,
             experiment_id = current_experiment.experiment_id,
             model_id = config.model.model_id
         )
         tokenizer = load.tokenizer
         model = load.model
         model = model.to(device)
+        logger.info("Model loaded")
         
         mlflow.set_tag("source", load.model_id)
 
-        simplified = model.num_labels > 10
+        simplified = model.num_labels < 10
         if simplified:
             mlflow.set_tag("labels-simplified", f"{simplified}")
         else:
@@ -67,6 +69,7 @@ def eval_main(config: EvalConfig):
             test_end_date = config.dataset.test.end_date,
             batch_size = 16
         )
+        logger.info("Dataset prepared")
 
         # log dataset metadata (date ranges)
         mlflow.log_params({
@@ -81,6 +84,7 @@ def eval_main(config: EvalConfig):
             test_dataloader = test_dataloader,
             device = device
         )
+        logger.info("Model evaluated")
         metrics_formatted = {f"final_{key}": value 
                              for key, value in test_metrics.items() 
                              if key != 'confusion_matrix'}
@@ -98,6 +102,7 @@ def eval_main(config: EvalConfig):
             figsize = figsize,
             fontsize = fontsize
         )
+        logger.info("Figure generated")
         mlflow.log_figure(test_cm, "test_cm.png")
 
         return run.info.run_id

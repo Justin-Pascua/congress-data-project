@@ -50,6 +50,8 @@ def train_main(config: TrainConfig):
         tokenizer = load.tokenizer
         model = load.model
         model = model.to(device)
+        logger.info("Model loaded")
+
         if load.source == ModelSource.BASE:
             mlflow.set_tag("source", "base")
         else:
@@ -70,6 +72,7 @@ def train_main(config: TrainConfig):
             max_length = config.training.max_length,
             batch_size = config.training.batch_size
         )
+        logger.info("Datasets prepared")
 
         # dataset metadata (date ranges)
         mlflow.log_params({
@@ -102,6 +105,7 @@ def train_main(config: TrainConfig):
             test_dataloader = dataloaders['test'],
             device = device
         )
+        logger.info("Model trained")
 
         # end-of-run metrics
         mlflow.log_metrics(
@@ -119,7 +123,6 @@ def train_main(config: TrainConfig):
                 for key, value in test_metrics.items() 
                 if key != 'confusion_matrix'}
         )
-
 
         # log plots
         labels = (simplified_encoder.classes_ if config.mlflow.labels_simplified
@@ -147,6 +150,7 @@ def train_main(config: TrainConfig):
             figsize = figsize,
             fontsize = fontsize
         )
+        logger.info("Figures generated")
         mlflow.log_figure(train_cm, "train_cm.png")
         mlflow.log_figure(val_cm, "val_cm.png")
         mlflow.log_figure(test_cm, "test_cm.png")
