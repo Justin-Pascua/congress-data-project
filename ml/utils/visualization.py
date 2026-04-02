@@ -2,6 +2,8 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 from typing import Literal, List
+import os
+from pathlib import Path
 
 def normalize_cm(cm: np.ndarray, mode: Literal['true', 'pred', 'all']):
     """
@@ -59,3 +61,17 @@ def plot_cm(cm: np.ndarray, labels: List[str], normalize: Literal['true', 'pred'
     plt.tight_layout()
 
     return plt.gcf()
+
+def ensure_local_image_dir(experiment, run):
+    """
+    Ensures that the local directory for saving images exists. Returns the path 
+    to the local directory. The directory is organized by experiment and run id, i.e. 
+    `images/{experiment_name}/{run_id}/`. This is used when MLflow logging of figures 
+    is turned off, so that figures can still be saved locally in an organized manner.
+    Args:
+        experiment: the MLflow experiment object
+        run: the MLflow run object
+    """
+    local_dir = Path("images") / experiment.name / run.info.run_id
+    os.makedirs(local_dir, exist_ok = True)
+    return local_dir

@@ -8,6 +8,7 @@ db_scripts/
 
 queue/
 dummy_data/
+images/
 logs/
 
 airflow/logs/
@@ -21,4 +22,3 @@ mlruns/
 mlflow_data/
 
 dev_utils/
-Makefile

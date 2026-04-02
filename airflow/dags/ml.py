@@ -2,6 +2,8 @@ from airflow.sdk import dag, task, Param
 from airflow.exceptions import AirflowFailException
 
 import mlflow
+import numpy as np
+import matplotlib.pyplot as plt
 
 from datetime import datetime, timedelta
 import logging
@@ -75,7 +77,9 @@ def eval_best():
         logger.info("Initializing config")
         config = EvalConfig({
             "mlflow": {
-                "experiment": context["params"]["experiment"]
+                "experiment": context["params"]["experiment"],
+                "description": context["params"]["description"],
+                "log_figs": False
             },
             "model": {
                 "model_id": context["params"]["model_id"]

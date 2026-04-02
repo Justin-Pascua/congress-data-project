@@ -8,6 +8,7 @@ class MLflowConfigBase(BaseModel):
     """
     experiment: str
     description: Optional[str] = None   # description given to run
+    log_figs: bool = True   # whether to log figures (e.g. confusion matrix) to MLflow; if False, then these will be saved locally but not logged to MLflow
 
 class TrainMLflowConfig(MLflowConfigBase):
     """

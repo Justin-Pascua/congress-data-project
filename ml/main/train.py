@@ -11,7 +11,7 @@ from .model_selection import load_model, ModelSource
 from .preprocessing import training_data_pipeline
 from ..utils.train_eval import train_loop, eval
 from ..utils.data import raw_encoder, simplified_encoder
-from ..utils.visualization import plot_cm
+from ..utils.visualization import plot_cm, ensure_local_image_dir
 from ..utils.config import TrainConfig
 
 def train_main(config: TrainConfig):
@@ -151,9 +151,17 @@ def train_main(config: TrainConfig):
             fontsize = fontsize
         )
         logger.info("Figures generated")
-        mlflow.log_figure(train_cm, "train_cm.png")
-        mlflow.log_figure(val_cm, "val_cm.png")
-        mlflow.log_figure(test_cm, "test_cm.png")
+        if config.mlflow.log_figs:
+            mlflow.log_figure(train_cm, "train_cm.png")
+            mlflow.log_figure(val_cm, "val_cm.png")
+            mlflow.log_figure(test_cm, "test_cm.png")
+        else:
+            local_dir = ensure_local_image_dir(current_experiment, run)
+            train_cm.savefig(f"{local_dir}/train_cm.png")
+            val_cm.savefig(f"{local_dir}/val_cm.png")
+            test_cm.savefig(f"{local_dir}/test_cm.png")
+            logger.info("Figure saved locally but not logged to MLflow")
+
 
         # if training from base, then log model
         if load.source == ModelSource.BASE:
@@ -181,4 +189,5 @@ if __name__ == '__main__':
     with open("./ml/main/train-config.yaml", "r") as f:
         config = TrainConfig(yaml.safe_load(f))
 
-    train_main(config)
+    run_id = train_main(config)
+    print(run_id)

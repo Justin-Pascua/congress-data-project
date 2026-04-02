@@ -8,12 +8,13 @@ import logging
 import yaml
 import dotenv
 import os
+from pathlib import Path
 
 from .model_selection import load_model, ModelSource
 from .preprocessing import eval_data_pipeline
 from ..utils.train_eval import eval
 from ..utils.data import raw_encoder, simplified_encoder
-from ..utils.visualization import plot_cm
+from ..utils.visualization import plot_cm, ensure_local_image_dir
 from ..utils.config import EvalConfig
 
 def eval_main(config: EvalConfig):
@@ -103,7 +104,12 @@ def eval_main(config: EvalConfig):
             fontsize = fontsize
         )
         logger.info("Figure generated")
-        mlflow.log_figure(test_cm, "test_cm.png")
+        if config.mlflow.log_figs:
+            mlflow.log_figure(test_cm, "test_cm.png")
+        else:
+            local_dir = ensure_local_image_dir(current_experiment, run)
+            test_cm.savefig(f"{local_dir}/test_cm.png")
+            logger.info("Figure saved locally but not logged to MLflow")
 
         return run.info.run_id
 
@@ -111,4 +117,5 @@ if __name__ == '__main__':
     with open("./ml/main/eval-config.yaml", "r") as f:
         config = EvalConfig(yaml.safe_load(f))
 
-    eval_main(config)
+    run_id = eval_main(config)
+    print(run_id)
