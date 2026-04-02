@@ -4,10 +4,8 @@
 .vscode/
 .gitignore
 
-logs/
-ledger/
+queue/
 
 demo.ipynb
-foo.py
-test.py
+dev_utils/
 

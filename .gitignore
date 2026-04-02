@@ -18,5 +18,7 @@ mlflow.db
 ml/main/train-config.yaml
 ml/main/eval-config.yaml
 mlruns/
+mlflow_data/
 
 dev_utils/
+Makefile

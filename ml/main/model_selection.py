@@ -4,6 +4,7 @@ from typing import List, Any, Optional, Literal
 from dataclasses import dataclass, replace
 from enum import Enum, auto
 import logging
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -22,12 +23,16 @@ class ModelLoad:
     model_id: Optional[str] = None
     metrics: Optional[dict] = None
 
+def get_model_uri(experiment_id, model_id) -> Path:
+    experiment_name = mlflow.get_experiment(experiment_id).name
+    base = Path("./mlflow_data/mlruns") 
+    model_uri = base / experiment_name / "models" / model_id / "artifacts"
+    return model_uri
+
 def load_logged(experiment_id: str, model_id: str) -> ModelLoad:
-    experiment = mlflow.get_experiment(experiment_id)
-    artifact_location = experiment.artifact_location
-    
+    model_uri = get_model_uri(experiment_id, model_id)
     components = mlflow.transformers.load_model(
-        model_uri = f"{artifact_location}/models/{model_id}/artifacts/",
+        model_uri = model_uri,
         return_type = "components"
     )
 
