@@ -28,7 +28,7 @@ default_args = {
     default_args = default_args,
     params={
         "congress_num": Param(default = None, type = ["null", "integer"], description = "Congress number to fetch. If not provided, then the API is called to fetch the current congress."),
-        "batch_size": Param(default = 250, type = "integer", description = "Number of bills to extract per batch"),
+        "batch_size": Param(default = 1000, type = "integer", description = "Number of bills to extract per batch"),
         "mode": Param(default = "incremental", enum = ["incremental", "full"],
                       description = "Specifies whether to pull all bills from the specified congress, "
                       "or only the bills updated since the specified number of `weeks_back`."),
