@@ -6,7 +6,6 @@ import time
 from datetime import timedelta
 import logging
 import mlflow
-from tqdm import tqdm
 
 from .metrics import MetricAccumulator
 
@@ -15,7 +14,8 @@ logger = logging.getLogger(__name__)
 def train_step(model, optimizer, 
                train_dataloader: DataLoader, 
                device: torch.device = torch.device("cpu"),
-               step_offset: int = 0) -> dict:
+               step_offset: int = 0,
+               log_every_n_steps: int = 5) -> dict:
     """
     Runs a single training epoch over the provided dataloader, and returns metrics.
     Args:
@@ -24,6 +24,7 @@ def train_step(model, optimizer,
         train_dataloader: a `DataLoader` providing training batches.
         device: a `torch.device` specifying which device to run on.
         step_offset: an `int` added to each batch index when logging to MLflow, used to produce globally unique step values across epochs.
+        log_every_n_steps: an `int` specifying how often to log batch-based metrics to logger.
     """
     model.train()
 
@@ -32,13 +33,10 @@ def train_step(model, optimizer,
     batch_metrics = MetricAccumulator(num_classes = model.num_labels, metric_prefix = 'train')
     num_batches = len(train_dataloader)
     
-    pbar = tqdm(total = num_batches, 
-                desc = 'train batch', 
-                bar_format = '{desc:<12}: {n_fmt}/{total_fmt} {bar:20} {elapsed} {rate_fmt}{postfix}',
-                file = sys.stdout,
-                leave = True)
     
     for i, batch in enumerate(train_dataloader):
+        if (i+1) % log_every_n_steps == 0:
+            logger.info(f"train batch {i + 1}/{num_batches}")
         batch = batch.to(device)
         out = model(**batch)
         optimizer.zero_grad()
@@ -59,15 +57,8 @@ def train_step(model, optimizer,
         )
         batch_metrics.reset()
 
-        pbar.update(1)
-        
-        
-    full_metrics = {'loss': loss/num_batches} | run_metrics.compute()
-    formatted_metrics = {key: f"{value:.3e}" for key, value in full_metrics.items()}
-    pbar.set_postfix(formatted_metrics)
-    pbar.close()
-
-    full_metrics = full_metrics | {'confusion_matrix': run_metrics.get_confusion_matrix()}
+    full_metrics = run_metrics.compute() | {'loss': loss/num_batches,
+                                            'confusion_matrix': run_metrics.get_confusion_matrix()}
 
     return full_metrics
 
@@ -76,7 +67,8 @@ def eval_step(model,
               device: torch.device = torch.device("cpu"),
               metric_prefix: str = 'val',
               step_offset: int = 0,
-              log_to_mlflow: bool = True) -> dict:
+              log_to_mlflow: bool = True,
+              log_every_n_steps: int = 5) -> dict:
     """
     Runs a single evaluation epoch over the provided dataloader.
 
@@ -87,6 +79,7 @@ def eval_step(model,
         metric_prefix: prefix applied to metric names when logging to MLflow
         step_offset: an `int` added to each batch index when logging to MLflow, used to produce globally unique step values across epochs.
         log_to_mlflow: a `bool` indicating whether to log batch-based metrics to mlflow
+        log_every_n_steps: an `int` specifying how often to log batch-based metrics to logger.
     """
     model.eval()
 
@@ -95,13 +88,9 @@ def eval_step(model,
     batch_metrics = MetricAccumulator(num_classes = model.num_labels, metric_prefix = metric_prefix)
     num_batches = len(dataloader)
     
-    pbar = tqdm(total = num_batches, 
-                desc = f'{metric_prefix} batch', 
-                bar_format = '{desc:<12}: {n_fmt}/{total_fmt} {bar:20} {elapsed} {rate_fmt}{postfix}',
-                file = sys.stdout,
-                leave = True)
-    
     for i, batch in enumerate(dataloader):
+        if (i+1) % log_every_n_steps == 0:
+            logger.info(f"{metric_prefix} batch {i + 1}/{num_batches}")
         with torch.no_grad():
             batch = batch.to(device)
             out = model(**batch)
@@ -121,14 +110,8 @@ def eval_step(model,
                 )
                 batch_metrics.reset()
 
-            pbar.update(1)
-
-    full_metrics = {'loss': loss/num_batches} | run_metrics.compute()
-    formatted_metrics = {f"{metric_prefix}_{key}": f"{value:.3e}" for key, value in full_metrics.items()}
-    pbar.set_postfix(formatted_metrics)
-    pbar.close()
-
-    full_metrics = full_metrics | {'confusion_matrix': run_metrics.get_confusion_matrix()}
+    full_metrics = run_metrics.compute()| {'loss': loss/num_batches,
+                                           'confusion_matrix': run_metrics.get_confusion_matrix()}
 
     return full_metrics
 

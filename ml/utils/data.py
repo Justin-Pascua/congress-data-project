@@ -108,15 +108,138 @@ def strip_html_tags(text: str) -> str:
     clean_text = re.sub(r'\s+', ' ', clean_text).strip()
     
     return clean_text
-    
-def process_bills(bills: List[Bill], simplify: bool) -> pd.DataFrame:
+
+def chunk_text(text: str, tokenizer, overlap: int = 50) -> list[str]:
+    """
+    Split text into chunks that fit within the tokenizer's max sequence length.
+    Args:
+        text: the input text to chunk.
+        tokenizer: a HuggingFace tokenizer instance.
+        overlap: number of tokens to overlap between chunks.
+    """
+    max_length = tokenizer.model_max_length
+    special_tokens_count = tokenizer.num_special_tokens_to_add(pair=False)
+    effective_max = max_length - special_tokens_count
+
+    if overlap >= effective_max:
+        raise ValueError(
+            f"overlap ({overlap}) must be less than effective max length ({effective_max})"
+        )
+
+    token_ids = tokenizer.encode(text, add_special_tokens=False)
+
+    if len(token_ids) <= effective_max:
+        return [text]
+
+    chunks = []
+    step = effective_max - overlap
+    start = 0
+
+    while start < len(token_ids):
+        end = start + effective_max
+        chunk_ids = token_ids[start:end]
+        chunk_text = tokenizer.decode(chunk_ids, skip_special_tokens = True)
+        chunks.append(chunk_text)
+        start += step
+
+    return chunks
+
+def chunk_dataframe(df: pd.DataFrame, tokenizer, overlap: int = 50,
+                    batch_size: int = 64) -> pd.DataFrame:
+    """
+    Chunk a dataframe of text samples so each chunk fits within the tokenizer's
+    max sequence length, using batch tokenization for efficiency.
+
+    Args:
+        df: Input dataframe with text and label columns.
+        tokenizer: A HuggingFace tokenizer instance.
+        overlap: Number of tokens to overlap between consecutive chunks.
+        text_col: Column name for the input text.
+        label_col: Column name for the string label.
+        numerical_label_col: Column name for the integer label.
+        batch_size: Number of texts to tokenize per batch.
+    """
+    max_length = tokenizer.model_max_length
+    special_tokens_count = tokenizer.num_special_tokens_to_add(pair = False)
+    effective_max = max_length - special_tokens_count
+
+    if overlap >= effective_max:
+        raise ValueError(
+            f"Overlap ({overlap}) must be less than effective max length ({effective_max})"
+        )
+
+    texts = df['summary'].tolist()
+    labels = df['label'].tolist()
+    numerical_labels = df['numericalLabel'].tolist()
+
+    # tokenize text column in batches
+    all_token_ids: list[list[int]] = []
+    for batch_start in range(0, len(texts), batch_size):
+        batch = texts[batch_start : batch_start + batch_size]
+        encoded = tokenizer(
+            batch,
+            add_special_tokens = False,
+            truncation = False,
+            padding = False,
+            return_attention_mask = False,
+            return_token_type_ids = False,
+        )
+        all_token_ids.extend(encoded["input_ids"])
+
+    step = effective_max - overlap
+
+    # slice tokenized samples into chunks and track which label each chunk belongs to
+    chunk_token_ids: list[list[int]] = []
+    group_idx: list[int] = []
+    chunk_labels: list[str] = []
+    chunk_numerical_labels: list[int] = []
+    for i, (token_ids, label, numerical_label) in enumerate(zip(all_token_ids, labels, numerical_labels)):
+        # if sample fits in context window, keep as is
+        if len(token_ids) <= effective_max:
+            chunk_token_ids.append(token_ids)
+            chunk_labels.append(label)
+            chunk_numerical_labels.append(numerical_label)
+            group_idx.append(i)
+        # if sample too long, slice into chunks with specified overlap
+        else:
+            for start in range(0, len(token_ids), step):
+                chunk = token_ids[start : start + effective_max]
+                chunk_token_ids.append(chunk)
+                chunk_labels.append(label)
+                chunk_numerical_labels.append(numerical_label)
+                group_idx.append(i)
+
+    # decode back into text
+    chunk_texts = tokenizer.batch_decode(
+        chunk_token_ids, skip_special_tokens=True
+    )
+
+    return pd.DataFrame(
+        {
+            'summary': chunk_texts,
+            'groupIndex': group_idx,
+            'label': chunk_labels,
+            'numericalLabel': chunk_numerical_labels,
+        }
+    )
+
+def process_bills(bills: List[Bill], simplify: bool, chunk: bool, tokenizer = None) -> pd.DataFrame:
     """
     Given a list of Bill objects from the database, returns a dataframe with cleaned summaries and labels (both text and numerical).
     Args:
         bills: a list of `database.models.Bill` objects.
         simplify: if `True`, then bill policy areas will be binned into 8 possible classes (as opposed to the original 33).
         If `False`, then the policy areas are left as is. 
+        chunk: if `True`, then the summaries will be tokenized and chunked into pieces that fit within the max token length of the model.
+            If `False`, then the summaries are left as is.
+        tokenizer: a HuggingFace tokenizer, required if `chunk` is `True`.
+    Returns:
+        A dataframe with columns 'summary', 'label', and 'numericalLabel'. 
     """
+
+    if chunk and tokenizer is None:
+        raise ValueError("tokenizer must be provided if chunk is True")
+
     summaries = [strip_html_tags(bill.summary) for bill in bills]
     labels = None
     if simplify:
@@ -131,6 +254,9 @@ def process_bills(bills: List[Bill], simplify: bool) -> pd.DataFrame:
         df['numericalLabel'] = simplified_encoder.transform(df['label'])
     else:
         df['numericalLabel'] = raw_encoder.transform(df['label'])
+        
+    if chunk:
+        df = chunk_dataframe(df, tokenizer)
     
     return df
 

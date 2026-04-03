@@ -63,6 +63,7 @@ def train_main(config: TrainConfig):
         dataloaders = training_data_pipeline(
             tokenizer = tokenizer, 
             simplify = config.mlflow.labels_simplified,
+            chunk = config.dataset.train.chunk,
             train_start_date = config.dataset.train.start_date, 
             train_end_date = config.dataset.train.end_date,
             test_start_date = config.dataset.test.start_date,

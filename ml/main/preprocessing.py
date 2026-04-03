@@ -8,6 +8,7 @@ from ..utils.data import process_bills, BillDataset, get_dataloader
 
 def training_data_pipeline(tokenizer, 
                            simplify: bool,
+                           chunk: bool,
                            train_start_date: datetime, train_end_date: datetime, 
                            test_start_date: datetime, test_end_date: datetime = datetime.now(),
                            weighted_sampling: bool = False,
@@ -25,6 +26,8 @@ def training_data_pipeline(tokenizer,
         tokenizer: HuggingFace tokenizer used to tokenize and pad sequences within each batch.
         simplify: if `True`, then bill policy areas will be binned into 8 possible classes (as opposed to the original 33).
             If `False`, then the policy areas are left as is. 
+        chunk: if `True`, then the summaries will be tokenized and chunked into pieces that fit within the max token length of the model.
+            If `False`, then the summaries are left as is.
         train_start_date: start date for querying training bills (inclusive).
         train_end_date: end date for querying training bills (inclusive).
         test_start_date: start date for querying test bills (inclusive).
@@ -56,9 +59,9 @@ def training_data_pipeline(tokenizer,
         start_date = test_start_date,
         end_date = test_end_date)
     
-    train_df = process_bills(train_bills, simplify)
-    val_df = process_bills(val_bills, simplify)
-    test_df = process_bills(test_bills, simplify)
+    train_df = process_bills(train_bills, simplify, chunk, tokenizer)
+    val_df = process_bills(val_bills, simplify, chunk, tokenizer)
+    test_df = process_bills(test_bills, simplify, chunk = False)        # TO DO: decide whether to chunk for inference
 
     train_dataset = BillDataset(train_df, 'summary', 'numericalLabel')
     val_dataset = BillDataset(val_df, 'summary', 'numericalLabel')
@@ -95,7 +98,7 @@ def eval_data_pipeline(tokenizer,
     test_bills = read_bills(
         start_date = test_start_date,
         end_date = test_end_date)
-    test_df = process_bills(test_bills, simplify)
+    test_df = process_bills(test_bills, simplify, chunk = False)        # TO DO: decide whether to chunk for inference
 
     test_dataset = BillDataset(test_df, 'summary', 'numericalLabel')
 
