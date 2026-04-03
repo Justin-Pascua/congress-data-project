@@ -16,27 +16,9 @@ class BillSample:
 
 @dataclass
 class IndexedBillSample:
-    i: int  # index indicating which parent bill the chunk belongs to
+    parent_idx: int  # index indicating which parent bill the chunk belongs to
     x: str  # text
     y: int  # label
-
-class IndexedBillDataset(Dataset):
-    def __init__(self, df: pd.DataFrame, 
-                 feature_col: str | List[str], 
-                 group_idx_col: str,
-                 target_col: str | List[str]):
-        self.idx_col = df[group_idx_col].reset_index(drop = True)   # column indicating which parent sample each chunk belongs to
-        self.X = df[feature_col].reset_index(drop = True)
-        self.y = df[target_col].reset_index(drop = True)
-
-    def __len__(self):
-        return len(self.y)
-
-    def __getitem__(self, index):
-        # not applying tokenizer here. 
-        # delegate tokenization to DataLoader so that tokenizer can handle padding
-        i, x, y = self.idx_col.iloc[index], self.X.iloc[index], self.y.iloc[index]
-        return IndexedBillSample(i, x, y)
 
 class BillDataset(Dataset):
     def __init__(self, df: pd.DataFrame, feature_col: str | List[str], target_col: str | List[str]):
@@ -50,7 +32,25 @@ class BillDataset(Dataset):
         # not applying tokenizer here. 
         # delegate tokenization to DataLoader so that tokenizer can handle padding
         x, y = self.X.iloc[index], self.y.iloc[index]
-        return x, y
+        return BillSample(x, y)
+
+class IndexedBillDataset(Dataset):
+    def __init__(self, df: pd.DataFrame, 
+                 feature_col: str | List[str], 
+                 group_idx_col: str,
+                 target_col: str | List[str]):
+        self.parent_idx = df[group_idx_col].reset_index(drop = True)   # column indicating which parent sample each chunk belongs to
+        self.X = df[feature_col].reset_index(drop = True)
+        self.y = df[target_col].reset_index(drop = True)
+
+    def __len__(self):
+        return len(self.y)
+
+    def __getitem__(self, index):
+        # not applying tokenizer here. 
+        # delegate tokenization to DataLoader so that tokenizer can handle padding
+        parent_idx, x, y = self.parent_idx.iloc[index], self.X.iloc[index], self.y.iloc[index]
+        return IndexedBillSample(parent_idx, x, y)
 
 raw2simplified = {
     # Security & Defense
@@ -247,7 +247,7 @@ def chunk_dataframe(df: pd.DataFrame, tokenizer, overlap: int = 50,
     return pd.DataFrame(
         {
             'summary': chunk_texts,
-            'groupIndex': group_idx,
+            'parentIndex': group_idx,
             'label': chunk_labels,
             'numericalLabel': chunk_numerical_labels,
         }
@@ -290,27 +290,35 @@ def process_bills(bills: List[Bill], simplify: bool, chunk: bool, tokenizer = No
     
     return df
 
-def make_collate_fn(tokenizer, max_length: int = None):
+def make_collate_fn(tokenizer, indexed: bool = False, max_length: int = None):
     """
     Factory function that creates collate_fn to be passed to a torch `DataLoader` object. 
     Args:
         tokenizer: a HuggingFace tokenizer. This handles the work of padding sequences with zeroes
+        indexed: if `True`, then the collate function will return indexed samples
         max_length: int passed to tokenizer to determine max token length of sequences. 
     """
-    def collate_fn(batch):
-        features, labels = zip(*batch)
-        x = tokenizer(features, 
+    def collate_fn(batch: List[BillSample | IndexedBillSample]):
+        x = tokenizer([item.x for item in batch],
                       padding = "longest", 
                       truncation = True,
                       max_length = max_length, 
                       return_tensors = "pt")
-        y = torch.tensor(labels, dtype = torch.long)
+        y = torch.tensor([item.y for item in batch], dtype = torch.long)
+        indices = None
+        if indexed:
+            indices = torch.tensor([item.parent_idx for item in batch], dtype = torch.long)
+
         # HF model expects labels in 'labels' parameter
-        return x | {'labels': y}
+        batch = x | {'labels': y}
+        if indexed:
+            batch = batch | {'parent_indices': indices}
+
+        return batch
 
     return collate_fn
 
-def get_dataloader(dataset: BillDataset, tokenizer, max_length: int = None, weighted_sampling: bool = False, **kwargs) -> DataLoader:
+def get_dataloader(dataset: BillDataset, tokenizer, max_length: int = None, weighted_sampling: bool = False, indexed: bool = False, **kwargs) -> DataLoader:
     """
     Returns a torch `DataLoader` equipped with a collate_fn as returned by `make_collate_fn`.
     Args:
@@ -318,6 +326,7 @@ def get_dataloader(dataset: BillDataset, tokenizer, max_length: int = None, weig
         tokenizer: a HuggingFace tokenizer passed to `make_collate_fn` to construct the collate_fn passed to the `DataLoader` constructor.
         max_length: int passed to tokenizer to determine max token length of sequences. 
         weighted: if `True`, then creates the `DataLoader` with a `WeightedRandomSampler` weighted by reciprocal of class counts
+        indexed: if `True`, then creates a collate_fn that where chunks samples are indexed by which parent bill they belong to. 
     """
 
     sampler = None    
@@ -333,7 +342,7 @@ def get_dataloader(dataset: BillDataset, tokenizer, max_length: int = None, weig
 
     dataloader = DataLoader(
         dataset, 
-        collate_fn = make_collate_fn(tokenizer, max_length),
+        collate_fn = make_collate_fn(tokenizer, indexed, max_length),
         sampler = sampler,
         **kwargs
     )

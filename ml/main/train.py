@@ -33,13 +33,8 @@ def train_main(config: TrainConfig):
                 "labels-simplified": f"{config.mlflow.labels_simplified}"},
         description = config.mlflow.description
     ) as run:
-        device = None
-        if torch.cuda.is_available():
-            device = torch.device("cuda")
-            logger.info(f"Using GPU: {torch.cuda.get_device_name(0)}") #
-        else:
-            device = torch.device("cpu")
-            logger.info("Using CPU")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        logger.info(f"Using {device}")
         
         # load model
         load = load_model(

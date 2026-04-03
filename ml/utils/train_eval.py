@@ -1,7 +1,9 @@
 import torch
 from torch.utils.data import DataLoader
+import numpy as np
 import mlflow
 
+from collections import defaultdict
 import sys
 import time
 from datetime import timedelta
@@ -35,7 +37,7 @@ def train_step(model, optimizer,
     
     prev_time = time.perf_counter()
     for i, batch in enumerate(train_dataloader):
-        if (i+1) % log_every_n_steps == 0:
+        if (i+1) % log_every_n_steps == 0 or (i+1) == num_batches:
             current_time = time.perf_counter()
             logger.info(f"train batch {i + 1}/{num_batches} ({(current_time - prev_time)/log_every_n_steps:.2f}s/it)")
             prev_time = current_time
@@ -93,7 +95,7 @@ def eval_step(model,
     
     prev_time = time.perf_counter()
     for i, batch in enumerate(dataloader):
-        if (i+1) % log_every_n_steps == 0:
+        if (i+1) % log_every_n_steps == 0 or (i+1) == num_batches:
             current_time = time.perf_counter()
             logger.info(f"{metric_prefix} batch {i + 1}/{num_batches} ({(current_time - prev_time)/log_every_n_steps:.2f}s/it)")
             prev_time = current_time
@@ -179,8 +181,44 @@ def eval(model,
     Computes evaluation metrics on a test dataset.
     Args:
         model: The model to be evaluated.
-        dataloader: a `Dataloader` providing validation batches.
+        test_dataloader: a `Dataloader` providing validation batches.
         device: a `torch.device` specifying which device to run on.
     """
     metrics = eval_step(model, test_dataloader, device, metric_prefix = 'test', log_to_mlflow = False)
+    return metrics
+
+def inference_eval(model,
+                   test_dataloader: DataLoader,
+                   device: torch.device = torch.device("cpu"),
+                   ) -> dict:
+    """
+    Used for inference time evaluation, where we chunk each sample into multiple pieces 
+    and want to aggregate predictions across chunks before computing metrics. 
+    """
+    doc_logits = defaultdict(lambda: torch.tensor([0.0] * len(model.num_labels)))
+    doc_targets = dict()
+
+    with torch.no_grad():
+        for batch_num, batch in enumerate(test_dataloader):
+            if (batch_num + 1) % 10 == 0 or (batch_num + 1) == len(test_dataloader):
+                print(f"Processing batch {batch_num + 1}/{len(test_dataloader)}")
+            tokenized = {'input_ids': batch['input_ids'].to(device),
+                        'attention_mask': batch['attention_mask'].to(device)}
+            parent_idxs = batch['parent_indices'].to(device)
+            targets = batch['labels'].to(device)
+
+            logits = model(**tokenized).logits
+
+            for i, (group_idx, logit, target) in enumerate(zip(parent_idxs, logits, targets)):
+                doc_idx = group_idx.item()
+                doc_logits[group_idx.item()] += logit.cpu()
+                doc_targets[group_idx.item()] = target.item()
+
+        sorted_idxs = sorted(doc_logits.keys())
+        preds = np.array([doc_logits[i].argmax().item() for i in sorted_idxs])
+        targets = np.array([doc_targets[i] for i in sorted_idxs])
+
+    metric_accum = MetricAccumulator(num_classes = model.num_labels, metric_prefix = 'test')
+    metric_accum.update(targets, preds)
+    metrics = metric_accum.compute() | {'confusion_matrix': metric_accum.get_confusion_matrix()}
     return metrics
