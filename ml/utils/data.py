@@ -5,8 +5,38 @@ from sklearn.preprocessing import LabelEncoder
 
 import re
 from typing import List
+from dataclasses import dataclass
 
 from database.models import Bill
+
+@dataclass 
+class BillSample:
+    x: str  # text
+    y: int  # label
+
+@dataclass
+class IndexedBillSample:
+    i: int  # index indicating which parent bill the chunk belongs to
+    x: str  # text
+    y: int  # label
+
+class IndexedBillDataset(Dataset):
+    def __init__(self, df: pd.DataFrame, 
+                 feature_col: str | List[str], 
+                 group_idx_col: str,
+                 target_col: str | List[str]):
+        self.idx_col = df[group_idx_col].reset_index(drop = True)   # column indicating which parent sample each chunk belongs to
+        self.X = df[feature_col].reset_index(drop = True)
+        self.y = df[target_col].reset_index(drop = True)
+
+    def __len__(self):
+        return len(self.y)
+
+    def __getitem__(self, index):
+        # not applying tokenizer here. 
+        # delegate tokenization to DataLoader so that tokenizer can handle padding
+        i, x, y = self.idx_col.iloc[index], self.X.iloc[index], self.y.iloc[index]
+        return IndexedBillSample(i, x, y)
 
 class BillDataset(Dataset):
     def __init__(self, df: pd.DataFrame, feature_col: str | List[str], target_col: str | List[str]):

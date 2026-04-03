@@ -17,6 +17,8 @@ from ..utils.data import raw_encoder, simplified_encoder
 from ..utils.visualization import plot_cm, ensure_local_image_dir
 from ..utils.config import EvalConfig
 
+logger = logging.getLogger(__name__)
+
 def eval_main(config: EvalConfig):
     """
     Evaluates a model on the test set.
@@ -25,7 +27,6 @@ def eval_main(config: EvalConfig):
     """
     dotenv.load_dotenv()
     transformers.logging.set_verbosity_error()
-    logger = logging.getLogger(__name__)
 
     mlflow.set_tracking_uri(os.getenv("MLFLOW_TRACKING_URI"))
     current_experiment = mlflow.set_experiment(config.mlflow.experiment)
@@ -114,6 +115,16 @@ def eval_main(config: EvalConfig):
         return run.info.run_id
 
 if __name__ == '__main__':
+    logging.basicConfig(
+        level = logging.INFO,
+        format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers = [
+            logging.StreamHandler()
+        ]
+    )
+    logger.info('Starting training script')
+    logging.getLogger('httpx').setLevel(logging.WARNING)
+    
     with open("./ml/main/eval-config.yaml", "r") as f:
         config = EvalConfig(yaml.safe_load(f))
 

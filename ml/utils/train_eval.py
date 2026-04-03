@@ -1,11 +1,11 @@
 import torch
 from torch.utils.data import DataLoader
+import mlflow
 
 import sys
 import time
 from datetime import timedelta
 import logging
-import mlflow
 
 from .metrics import MetricAccumulator
 
@@ -33,10 +33,13 @@ def train_step(model, optimizer,
     batch_metrics = MetricAccumulator(num_classes = model.num_labels, metric_prefix = 'train')
     num_batches = len(train_dataloader)
     
-    
+    prev_time = time.perf_counter()
     for i, batch in enumerate(train_dataloader):
         if (i+1) % log_every_n_steps == 0:
-            logger.info(f"train batch {i + 1}/{num_batches}")
+            current_time = time.perf_counter()
+            logger.info(f"train batch {i + 1}/{num_batches} ({(current_time - prev_time)/log_every_n_steps:.2f}s/it)")
+            prev_time = current_time
+
         batch = batch.to(device)
         out = model(**batch)
         optimizer.zero_grad()
@@ -70,7 +73,7 @@ def eval_step(model,
               log_to_mlflow: bool = True,
               log_every_n_steps: int = 5) -> dict:
     """
-    Runs a single evaluation epoch over the provided dataloader.
+    Runs a single evaluation epoch over the provided dataloader. Used for evaluation on validation set.
 
     Args:
         model: The model to be evaluated.
@@ -88,9 +91,13 @@ def eval_step(model,
     batch_metrics = MetricAccumulator(num_classes = model.num_labels, metric_prefix = metric_prefix)
     num_batches = len(dataloader)
     
+    prev_time = time.perf_counter()
     for i, batch in enumerate(dataloader):
         if (i+1) % log_every_n_steps == 0:
-            logger.info(f"{metric_prefix} batch {i + 1}/{num_batches}")
+            current_time = time.perf_counter()
+            logger.info(f"{metric_prefix} batch {i + 1}/{num_batches} ({(current_time - prev_time)/log_every_n_steps:.2f}s/it)")
+            prev_time = current_time
+
         with torch.no_grad():
             batch = batch.to(device)
             out = model(**batch)
