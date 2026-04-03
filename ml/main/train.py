@@ -8,8 +8,8 @@ import dotenv
 import os
 
 from .model_selection import load_model, ModelSource
-from .preprocessing import training_data_pipeline
-from ..utils.train_eval import train_loop, eval
+from .preprocessing import training_data_pipeline, eval_data_pipeline
+from ..utils.train_eval import train_loop, inference_eval
 from ..utils.data import raw_encoder, simplified_encoder
 from ..utils.visualization import plot_cm, ensure_local_image_dir
 from ..utils.config import TrainConfig
@@ -56,16 +56,21 @@ def train_main(config: TrainConfig):
         # training hyperparams (e.g. batch size, epochs, lr, etc.)
         mlflow.log_params(config.training.model_dump())
 
-        dataloaders = training_data_pipeline(
+        train_val_dataloaders = training_data_pipeline(
             tokenizer = tokenizer, 
             simplify = config.mlflow.labels_simplified,
-            chunk = config.dataset.train.chunk,
             train_start_date = config.dataset.train.start_date, 
             train_end_date = config.dataset.train.end_date,
-            test_start_date = config.dataset.test.start_date,
-            test_end_date = config.dataset.test.end_date,
             weighted_sampling = config.dataset.train.weighted_sampling,
             val_frac = config.dataset.train.val_frac,
+            max_length = config.training.max_length,
+            batch_size = config.training.batch_size
+        )
+        test_dataloader = eval_data_pipeline(
+            tokenizer = tokenizer, 
+            simplify = config.mlflow.labels_simplified,
+            test_start_date = config.dataset.test.start_date, 
+            test_end_date = config.dataset.test.end_date,
             max_length = config.training.max_length,
             batch_size = config.training.batch_size
         )
@@ -79,9 +84,12 @@ def train_main(config: TrainConfig):
             'weighted_sampling': config.dataset.train.weighted_sampling,
             'test_start_date': config.dataset.test.start_date,
             'test_end_date': config.dataset.test.end_date,
-            'train_size': len(dataloaders['train'].dataset),
-            'val_size': len(dataloaders['val'].dataset),
-            'test_size': len(dataloaders['test'].dataset),
+            'train_num_bills': train_val_dataloaders['train'].dataset.num_bills,
+            'train_num_chunks': train_val_dataloaders['train'].dataset.num_chunks,
+            'val_num_bills': train_val_dataloaders['val'].dataset.num_bills,
+            'val_num_chunks': train_val_dataloaders['val'].dataset.num_chunks,
+            'test_num_bills': test_dataloader.dataset.num_bills,
+            'test_num_chunks': test_dataloader.dataset.num_chunks,
         })
 
         optimizer = torch.optim.AdamW(
@@ -92,14 +100,14 @@ def train_main(config: TrainConfig):
         history = train_loop(
             model = model,
             optimizer = optimizer,
-            train_dataloader = dataloaders['train'],
-            val_dataloader = dataloaders['val'],
+            train_dataloader = train_val_dataloaders['train'],
+            val_dataloader = train_val_dataloaders['val'],
             epochs = config.training.epochs,
             device = device
         )
-        test_metrics = eval(
+        test_metrics = inference_eval(
             model = model,
-            test_dataloader = dataloaders['test'],
+            test_dataloader = test_dataloader,
             device = device
         )
         logger.info("Model trained")

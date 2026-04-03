@@ -190,18 +190,30 @@ def eval(model,
 def inference_eval(model,
                    test_dataloader: DataLoader,
                    device: torch.device = torch.device("cpu"),
+                   log_every_n_steps: int = 10
                    ) -> dict:
     """
     Used for inference time evaluation, where we chunk each sample into multiple pieces 
     and want to aggregate predictions across chunks before computing metrics. 
+    Args:
+        model: The model to be evaluated.
+        test_dataloader: a `Dataloader` providing validation batches.
+        device: a `torch.device` specifying which device to run on.
+        log_every_n_steps: an `int` specifying how often to log batch-based metrics to logger.
     """
-    doc_logits = defaultdict(lambda: torch.tensor([0.0] * len(model.num_labels)))
+    logger.info("Beginning inference evaluation")
+    doc_logits = defaultdict(lambda: torch.tensor([0.0] * model.num_labels))
     doc_targets = dict()
 
+    prev_time = time.perf_counter()
     with torch.no_grad():
         for batch_num, batch in enumerate(test_dataloader):
-            if (batch_num + 1) % 10 == 0 or (batch_num + 1) == len(test_dataloader):
-                print(f"Processing batch {batch_num + 1}/{len(test_dataloader)}")
+            if (batch_num + 1) % log_every_n_steps == 0 or (batch_num + 1) == len(test_dataloader):
+                current_time = time.perf_counter()
+                logger.info(f"Testing batch {batch_num + 1}/{len(test_dataloader)}"
+                            f"({(current_time - prev_time)/log_every_n_steps:.2f}s/it)")
+                prev_time = current_time
+
             tokenized = {'input_ids': batch['input_ids'].to(device),
                         'attention_mask': batch['attention_mask'].to(device)}
             parent_idxs = batch['parent_indices'].to(device)
@@ -209,8 +221,7 @@ def inference_eval(model,
 
             logits = model(**tokenized).logits
 
-            for i, (group_idx, logit, target) in enumerate(zip(parent_idxs, logits, targets)):
-                doc_idx = group_idx.item()
+            for group_idx, logit, target in zip(parent_idxs, logits, targets):
                 doc_logits[group_idx.item()] += logit.cpu()
                 doc_targets[group_idx.item()] = target.item()
 

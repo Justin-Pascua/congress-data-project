@@ -12,7 +12,7 @@ from pathlib import Path
 
 from .model_selection import load_model, ModelSource
 from .preprocessing import eval_data_pipeline
-from ..utils.train_eval import eval
+from ..utils.train_eval import inference_eval
 from ..utils.data import raw_encoder, simplified_encoder
 from ..utils.visualization import plot_cm, ensure_local_image_dir
 from ..utils.config import EvalConfig
@@ -72,11 +72,12 @@ def eval_main(config: EvalConfig):
         mlflow.log_params({
             'test_start_date': config.dataset.test.start_date,
             'test_end_date': config.dataset.test.end_date,
-            'test_size': len(test_dataloader.dataset),
+            'test_num_bills': test_dataloader.dataset.num_bills,
+            'test_num_chunks': test_dataloader.dataset.num_chunks
         })
 
         # eval
-        test_metrics = eval(
+        test_metrics = inference_eval(
             model = model,
             test_dataloader = test_dataloader,
             device = device

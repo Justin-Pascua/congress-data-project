@@ -21,9 +21,11 @@ class IndexedBillSample:
     y: int  # label
 
 class BillDataset(Dataset):
-    def __init__(self, df: pd.DataFrame, feature_col: str | List[str], target_col: str | List[str]):
-        self.X = df[feature_col].reset_index(drop = True)
-        self.y = df[target_col].reset_index(drop = True)
+    def __init__(self, df: pd.DataFrame):
+        self.X = df['summary'].reset_index(drop = True)
+        self.y = df['numericalLabel'].reset_index(drop = True)
+        self.num_chunks = len(df)
+        self.num_bills = len(df['parentIndex'].unique())
 
     def __len__(self):
         return len(self.y)
@@ -35,13 +37,12 @@ class BillDataset(Dataset):
         return BillSample(x, y)
 
 class IndexedBillDataset(Dataset):
-    def __init__(self, df: pd.DataFrame, 
-                 feature_col: str | List[str], 
-                 group_idx_col: str,
-                 target_col: str | List[str]):
-        self.parent_idx = df[group_idx_col].reset_index(drop = True)   # column indicating which parent sample each chunk belongs to
-        self.X = df[feature_col].reset_index(drop = True)
-        self.y = df[target_col].reset_index(drop = True)
+    def __init__(self, df: pd.DataFrame):
+        self.parent_idx = df['parentIndex'].reset_index(drop = True)   # column indicating which parent sample each chunk belongs to
+        self.X = df['summary'].reset_index(drop = True)
+        self.y = df['numericalLabel'].reset_index(drop = True)
+        self.num_chunks = len(df)
+        self.num_bills = len(df['parentIndex'].unique())
 
     def __len__(self):
         return len(self.y)

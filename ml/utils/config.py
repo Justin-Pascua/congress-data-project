@@ -51,7 +51,6 @@ class TrainDatasetConfig(BaseModel):
     """
     start_date: datetime | date   # dates specify date range to pull samples from
     end_date: datetime | date
-    chunk: bool                   # whether to chunk samples that exceed max token length into multiple samples with specified overlap
     val_frac: float               # specifies what fraction of data to use for validation
     weighted_sampling: bool
 
