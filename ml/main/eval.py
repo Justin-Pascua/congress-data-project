@@ -114,11 +114,12 @@ if __name__ == '__main__':
     logging.basicConfig(
         level = logging.INFO,
         format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt = '%Y-%m-%d %H:%M:%S',
         handlers = [
             logging.StreamHandler()
         ]
     )
-    logger.info('Starting training script')
+    logger.info('Starting eval script')
     logging.getLogger('httpx').setLevel(logging.WARNING)
     
     with open("./ml/main/eval-config.yaml", "r") as f:

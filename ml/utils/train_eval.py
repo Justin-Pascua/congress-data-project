@@ -62,7 +62,7 @@ def train_step(model, optimizer,
         )
         batch_metrics.reset()
 
-    full_metrics = run_metrics.compute() | {'loss': loss/num_batches,
+    full_metrics = run_metrics.compute() | {'train_loss': loss/num_batches,
                                             'confusion_matrix': run_metrics.get_confusion_matrix()}
 
     return full_metrics
@@ -119,7 +119,10 @@ def eval_step(model,
                 )
                 batch_metrics.reset()
 
-    full_metrics = run_metrics.compute()| {'loss': loss/num_batches,
+    # metric prefix needed for separating train and val metrics in mlflow,
+    # but not needed for confusion matrix because we don't log the cm directly. 
+    # instead we log a figure generated from the cm
+    full_metrics = run_metrics.compute()| {f'{metric_prefix}_loss': loss/num_batches,
                                            'confusion_matrix': run_metrics.get_confusion_matrix()}
 
     return full_metrics
@@ -201,6 +204,7 @@ def inference_eval(model,
         device: a `torch.device` specifying which device to run on.
         log_every_n_steps: an `int` specifying how often to log batch-based metrics to logger.
     """
+    start_time = time.perf_counter()
     logger.info("Beginning inference evaluation")
     doc_logits = defaultdict(lambda: torch.tensor([0.0] * model.num_labels))
     doc_targets = dict()
@@ -210,7 +214,7 @@ def inference_eval(model,
         for batch_num, batch in enumerate(test_dataloader):
             if (batch_num + 1) % log_every_n_steps == 0 or (batch_num + 1) == len(test_dataloader):
                 current_time = time.perf_counter()
-                logger.info(f"Testing batch {batch_num + 1}/{len(test_dataloader)}"
+                logger.info(f"test batch {batch_num + 1}/{len(test_dataloader)} "
                             f"({(current_time - prev_time)/log_every_n_steps:.2f}s/it)")
                 prev_time = current_time
 
@@ -232,4 +236,8 @@ def inference_eval(model,
     metric_accum = MetricAccumulator(num_classes = model.num_labels, metric_prefix = 'test')
     metric_accum.update(targets, preds)
     metrics = metric_accum.compute() | {'confusion_matrix': metric_accum.get_confusion_matrix()}
+    
+    end_time = time.perf_counter()
+    logger.info(f"Inference evaluation complete ({end_time - start_time:.2f}s)")
+    
     return metrics
