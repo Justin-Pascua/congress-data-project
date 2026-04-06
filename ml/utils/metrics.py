@@ -1,7 +1,11 @@
 import numpy as np
-from typing import Literal, List, Optional
+from typing import Literal
 
 class MetricAccumulator:
+    """
+    Class for accumulating metrics across batches during training or evaluation.
+    Maintains a confusion matrix and can compute accuracy, precision, recall, and f1
+    """
     def __init__(self, num_classes: int, metric_prefix: str = None):
         self.num_classes = num_classes
         self.metric_prefix = metric_prefix

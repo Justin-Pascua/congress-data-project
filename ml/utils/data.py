@@ -11,16 +11,32 @@ from database.models import Bill
 
 @dataclass 
 class BillSample:
+    """
+    Dataclass representing a single sample, where x is the text summary 
+    of a bill and y is the corresponding label. Used when samples are 
+    not indexed by parent bill (i.e. when we don't need to keep track of 
+    which chunks belong to which parent bill).
+    """
     x: str  # text
     y: int  # label
 
 @dataclass
 class IndexedBillSample:
+    """
+    Dataclass representing a single indexed sample, where parent_idx indicates 
+    which parent bill the chunk belongs to, x is the text summary, and y is the
+    corresponding label. Used when evaluating in inference mode, where we chunk 
+    each bill into multiple pieces and want to aggregate predictions across 
+    chunks before computing metrics.
+    """
     parent_idx: int  # index indicating which parent bill the chunk belongs to
     x: str  # text
     y: int  # label
 
 class BillDataset(Dataset):
+    """
+    Dataset returning samples as `BillSample` dataclass instances
+    """
     def __init__(self, df: pd.DataFrame):
         self.X = df['summary'].reset_index(drop = True)
         self.y = df['numericalLabel'].reset_index(drop = True)
@@ -37,6 +53,9 @@ class BillDataset(Dataset):
         return BillSample(x, y)
 
 class IndexedBillDataset(Dataset):
+    """
+    Dataset returning samples as `IndexedBillSample` dataclass instances
+    """
     def __init__(self, df: pd.DataFrame):
         self.parent_idx = df['parentIndex'].reset_index(drop = True)   # column indicating which parent sample each chunk belongs to
         self.X = df['summary'].reset_index(drop = True)
@@ -53,6 +72,7 @@ class IndexedBillDataset(Dataset):
         parent_idx, x, y = self.parent_idx.iloc[index], self.X.iloc[index], self.y.iloc[index]
         return IndexedBillSample(parent_idx, x, y)
 
+# mapping from raw policy areas to simplified ones for the 8-label version of the task
 raw2simplified = {
     # Security & Defense
     "Armed Forces and National Security": "Security & Defense",
@@ -104,17 +124,7 @@ raw2simplified = {
     "Private Legislation": "Government & Law",
 }
 
-def policy_area_simplifier(raw_policy_area: str) -> str:
-    """
-    Maps raw policy areas to simplified classes
-    Args:
-        raw_polcy_area: a raw policy area string
-    """
-    try:
-        return raw2simplified[raw_policy_area]
-    except:
-        return None
-
+# encoders used to pass labels to other scripts and to decode
 possible_raw_labels = list(set(raw2simplified.keys()))
 raw_encoder = LabelEncoder()
 raw_encoder.fit(possible_raw_labels)
@@ -274,7 +284,7 @@ def process_bills(bills: List[Bill], simplify: bool, chunk: bool, tokenizer = No
     summaries = [strip_html_tags(bill.summary) for bill in bills]
     labels = None
     if simplify:
-        labels = [policy_area_simplifier(bill.policy_area) for bill in bills]
+        labels = [raw2simplified.get(bill.policy_area, None) for bill in bills]
     else:
         labels = [bill.policy_area for bill in bills]
 

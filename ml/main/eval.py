@@ -1,6 +1,4 @@
 import torch
-import torch.nn as nn
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
 import transformers
 import mlflow
 
@@ -8,9 +6,8 @@ import logging
 import yaml
 import dotenv
 import os
-from pathlib import Path
 
-from .model_selection import load_model, ModelSource
+from .model_selection import load_model
 from .preprocessing import eval_data_pipeline
 from ..utils.train_eval import inference_eval
 from ..utils.data import raw_encoder, simplified_encoder

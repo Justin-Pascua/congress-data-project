@@ -15,11 +15,9 @@ def training_data_pipeline(tokenizer,
                            max_length: int = None,
                            **kwargs) -> Dict[str, DataLoader]:
     """
-    Pulls bill records from the database and constructs train, validation, and
-    test DataLoaders using date-based splits to prevent data contamination.
-    Training and validation bills are drawn from [train_start_date, train_end_date]
-    and split by val_frac. Test bills are drawn from a separate, later date range
-    [test_start_date, test_end_date] with no overlap with the training window.
+    Pulls bill records from the database and constructs train and validation DataLoaders. 
+    Returns a dict whose values are DataLoaders equipped with `BillDatasets` for bills drawn 
+    from the date range [train_start_date, train_end_date]
 
     Args:
         tokenizer: HuggingFace tokenizer used to tokenize and pad sequences within each batch.
@@ -62,6 +60,8 @@ def eval_data_pipeline(tokenizer,
                        **kwargs) -> DataLoader:
     """
     Pulls bill records from the database and constructs a DataLoader to be used for evaluation.
+    Returns a DataLoader equipped with a `IndexedBillDataset` for bills drawn from the date range 
+    [test_start_date, test_end_date]
 
     Args:
         tokenizer: HuggingFace tokenizer used to tokenize and pad sequences within each batch.

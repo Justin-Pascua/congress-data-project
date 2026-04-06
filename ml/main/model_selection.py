@@ -1,8 +1,8 @@
 import mlflow
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
-from typing import List, Any, Optional, Literal
+from typing import List, Any, Optional
 from dataclasses import dataclass, replace
-from enum import Enum, auto
+from enum import Enum
 import logging
 from pathlib import Path
 
@@ -17,6 +17,9 @@ class ModelSource(Enum):
 
 @dataclass
 class ModelLoad:
+    """
+    Dataclass for storing loaded model, tokenizer, and metadata
+    """
     model: Any
     tokenizer: Any
     source: ModelSource
@@ -24,12 +27,25 @@ class ModelLoad:
     metrics: Optional[dict] = None
 
 def get_model_uri(experiment_id, model_id) -> Path:
+    """
+    Returns path to model artifacts for a given model id and experiment id. 
+    Assumes mlflow is configured to store artifacts in ./mlflow_data/mlruns
+    Args:
+        experiment_id: The id of the MLflow experiment to load from
+        model_id: The id of the model to load
+    """
     experiment_name = mlflow.get_experiment(experiment_id).name
     base = Path("./mlflow_data/mlruns") 
     model_uri = base / experiment_name / "models" / model_id / "artifacts"
     return model_uri
 
 def load_logged(experiment_id: str, model_id: str) -> ModelLoad:
+    """
+    Loads model and tokenizer from MLflow given an experiment id and model id. 
+    Args:
+        experiment_id: The id of the MLflow experiment to load from
+        model_id: The id of the model to load
+    """
     model_uri = get_model_uri(experiment_id, model_id)
     components = mlflow.transformers.load_model(
         model_uri = model_uri,
@@ -44,6 +60,14 @@ def load_logged(experiment_id: str, model_id: str) -> ModelLoad:
     )
 
 def load_best_logged(experiment_id: str, metrics: List[str]) -> ModelLoad:
+    """
+    Loads the best model from MLflow given an experiment id and a list of 
+    metrics to sort by.
+    Args:
+        experiment_id: The id of the MLflow experiment to load from
+        metrics: A list of metric names to sort by. Models will be sorted 
+            by these metrics in descending order
+    """
     sorted_models = mlflow.search_logged_models(
         experiment_ids = [experiment_id],
         order_by = [{"field_name": f"metrics.{metric}", "ascending": False} 
@@ -59,6 +83,13 @@ def load_best_logged(experiment_id: str, metrics: List[str]) -> ModelLoad:
     return replace(load, metrics = metrics)
 
 def load_base(checkpoint: str, num_labels: int) -> ModelLoad:
+    """
+    Loads base model and tokenizer from HuggingFace given a checkpoint 
+    and number of labels. 
+    Args:
+        checkpoint: The HuggingFace checkpoint to load from
+        num_labels: The number of labels for the sequence classification head
+    """
     if checkpoint is None:
         raise ValueError("Can't load base model with None as checkpoint")
     if num_labels is None:
@@ -77,6 +108,26 @@ def load_model(eval_mode: bool = False,
                model_id: str = None,
                force_base: bool = False, 
                checkpoint: str = None, num_labels: int = None) -> ModelLoad:
+    """
+    Loads model and tokenizer based on provided arguments. If force_base is True,
+    then loads base model from HuggingFace using checkpoint and num_labels. 
+    Otherwise, if model_id is provided, loads the corresponding model from MLflow.
+    If neither force_base nor model_id is provided, then looks for the best model
+    in MLflow and loads it. If no models are found in MLflow, then loads base model 
+    from HuggingFace. 
+    Args:
+        eval_mode: Whether or not the model will be loaded for evaluation. If True, 
+            then force_base cannot be True, since base model is only used for training.
+        experiment_id: The id of the MLflow experiment to load from. Required if 
+            model_id is provided
+        model_id: The id of the model to load from MLflow. If not provided, 
+            then looks for best model in MLflow
+        force_base: Whether or not to force loading the base model from HuggingFace. 
+            If True, then checkpoint and num_labels must be provided, and model_id is ignored
+        checkpoint: The HuggingFace checkpoint to load from if force_base is True
+        num_labels: The number of labels for the sequence classification head
+
+    """
     # if need to load base model
     if force_base:
         # then check that checkpoint and num_labels is provided

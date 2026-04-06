@@ -75,7 +75,8 @@ def eval_step(model,
               log_to_mlflow: bool = True,
               log_every_n_steps: int = 5) -> dict:
     """
-    Runs a single evaluation epoch over the provided dataloader. Used for evaluation on validation set.
+    Runs a single evaluation epoch over the provided dataloader, usually the validation set.
+    This evaluates predictions on individual chunks without aggregation
 
     Args:
         model: The model to be evaluated.
@@ -176,20 +177,6 @@ def train_loop(model, optimizer,
     logger.info(f"Training loop finished ({timedelta(seconds = int(end - start))})")
     return history
 
-def eval(model, 
-         test_dataloader: DataLoader,
-         device: torch.device = torch.device("cpu"),
-         ) -> dict:
-    """
-    Computes evaluation metrics on a test dataset.
-    Args:
-        model: The model to be evaluated.
-        test_dataloader: a `Dataloader` providing validation batches.
-        device: a `torch.device` specifying which device to run on.
-    """
-    metrics = eval_step(model, test_dataloader, device, metric_prefix = 'test', log_to_mlflow = False)
-    return metrics
-
 def inference_eval(model,
                    test_dataloader: DataLoader,
                    device: torch.device = torch.device("cpu"),
@@ -206,6 +193,7 @@ def inference_eval(model,
     """
     start_time = time.perf_counter()
     logger.info("Beginning inference evaluation")
+    
     doc_logits = defaultdict(lambda: torch.tensor([0.0] * model.num_labels))
     doc_targets = dict()
 
@@ -221,13 +209,13 @@ def inference_eval(model,
             tokenized = {'input_ids': batch['input_ids'].to(device),
                         'attention_mask': batch['attention_mask'].to(device)}
             parent_idxs = batch['parent_indices'].to(device)
-            targets = batch['labels'].to(device)
+            batch_targets = batch['labels'].to(device)
 
-            logits = model(**tokenized).logits
+            batch_logits = model(**tokenized).logits
 
-            for group_idx, logit, target in zip(parent_idxs, logits, targets):
-                doc_logits[group_idx.item()] += logit.cpu()
-                doc_targets[group_idx.item()] = target.item()
+            for group_idx, logits, targets in zip(parent_idxs, batch_logits, batch_targets):
+                doc_logits[group_idx.item()] += logits
+                doc_targets[group_idx.item()] = targets.item()
 
         sorted_idxs = sorted(doc_logits.keys())
         preds = np.array([doc_logits[i].argmax().item() for i in sorted_idxs])
