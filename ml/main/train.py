@@ -63,6 +63,7 @@ def train_main(config: TrainConfig):
             train_end_date = config.dataset.train.end_date,
             weighted_sampling = config.dataset.train.weighted_sampling,
             val_frac = config.dataset.train.val_frac,
+            max_batches = config.dataset.train.max_batches,
             max_length = config.training.max_length,
             batch_size = config.training.batch_size
         )

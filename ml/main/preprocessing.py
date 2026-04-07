@@ -12,7 +12,9 @@ def training_data_pipeline(tokenizer,
                            train_start_date: datetime, train_end_date: datetime, 
                            weighted_sampling: bool = False,
                            val_frac: float = 0.2,
+                           max_batches: int = None,
                            max_length: int = None,
+                           batch_size: int = 16,
                            **kwargs) -> Dict[str, DataLoader]:
     """
     Pulls bill records from the database and constructs train and validation DataLoaders. 
@@ -29,6 +31,7 @@ def training_data_pipeline(tokenizer,
             created with a `WeightedRandomSampler` weighted by reciprocal of class counts
         val_frac: fraction of the training pool to reserve for validation. Defaults to 0.2.
         max_length: maximum token length for truncating sequences. If None, no truncation is applied.
+        batch_size: size of each training batch.
         **kwargs: additional keyword arguments forwarded to get_dataloader (e.g. batch_size, num_workers).
 
     Returns:
@@ -40,16 +43,17 @@ def training_data_pipeline(tokenizer,
     train_val_bills = read_bills(
         start_date = train_start_date,
         end_date = train_end_date)
-    train_bills, val_bills = train_test_split(train_val_bills, test_size = val_frac)
     
-    train_df = process_bills(train_bills, simplify, chunk = True, tokenizer = tokenizer)
-    val_df = process_bills(val_bills, simplify, chunk = True, tokenizer = tokenizer)
+    full_df = process_bills(train_val_bills, simplify, chunk = True, tokenizer = tokenizer)
+    if max_batches is not None:
+        full_df = full_df.sample(n = max_batches * batch_size)
+    train_df, val_df = train_test_split(full_df, test_size = val_frac)
 
     train_dataset = BillDataset(train_df)
     val_dataset = BillDataset(val_df)
 
-    train_dataloader = get_dataloader(train_dataset, tokenizer, max_length, weighted_sampling, **kwargs)
-    val_dataloader = get_dataloader(val_dataset, tokenizer, max_length, **kwargs)
+    train_dataloader = get_dataloader(train_dataset, tokenizer, max_length, weighted_sampling, batch_size = batch_size, **kwargs)
+    val_dataloader = get_dataloader(val_dataset, tokenizer, max_length, batch_size = batch_size, **kwargs)
 
     return {'train': train_dataloader,
             'val': val_dataloader}
@@ -57,6 +61,7 @@ def training_data_pipeline(tokenizer,
 def eval_data_pipeline(tokenizer, 
                        simplify: bool,
                        test_start_date: datetime, test_end_date: datetime = datetime.now(),
+                       batch_size: int = 16,
                        **kwargs) -> DataLoader:
     """
     Pulls bill records from the database and constructs a DataLoader to be used for evaluation.
@@ -70,6 +75,7 @@ def eval_data_pipeline(tokenizer,
         test_start_date: start date for querying test bills (inclusive).
         test_end_date: end date for querying test bills (inclusive). Defaults to now.
         max_length: maximum token length for truncating sequences. If None, no truncation is applied.
+        batch_size: size of each test batch.
         **kwargs: additional keyword arguments forwarded to get_dataloader (e.g. batch_size, num_workers).
     """
     if test_end_date is not None:
@@ -82,6 +88,6 @@ def eval_data_pipeline(tokenizer,
     test_df = process_bills(test_bills, simplify, chunk = True, tokenizer = tokenizer)
 
     test_dataset = IndexedBillDataset(test_df)
-    test_dataloader = get_dataloader(test_dataset, tokenizer, indexed = True, **kwargs)
+    test_dataloader = get_dataloader(test_dataset, tokenizer, indexed = True, batch_size = batch_size, **kwargs)
 
     return test_dataloader

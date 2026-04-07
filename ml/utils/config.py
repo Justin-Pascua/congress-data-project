@@ -51,7 +51,8 @@ class TrainDatasetConfig(BaseModel):
     """
     start_date: datetime | date   # dates specify date range to pull samples from
     end_date: datetime | date
-    val_frac: float               # specifies what fraction of data to use for validation
+    val_frac: float                # specifies what fraction of data to use for validation
+    max_batches: int | None        # if not None, then limits the number of samples (for the train and val sets combined)
     weighted_sampling: bool
 
 class TestDatasetConfig(BaseModel):
@@ -65,8 +66,9 @@ class DatasetConfig(BaseModel):
     """
     Container for train and test dataset configurations.
     """
+    # both optional for future flexibility, but at least one must be provided in practice
     train: Optional[TrainDatasetConfig] = None
-    test: TestDatasetConfig
+    test: Optional[TestDatasetConfig] = None
 
 class TrainConfig(BaseModel):
     """
@@ -95,9 +97,11 @@ class TrainConfig(BaseModel):
             start_date: 2025-01-01
             end_date: 2025-12-31
             val_frac: 0.25
+            max_batches: 500
+            weighted_sampling: True
           test:
-            start_date: 2026-01-01
-            end_date:        # Leave blank to default to datetime.now() at runtime
+             start_date: 2026-01-01
+             end_date: 2026-12-31
 
     Usage::
 
@@ -122,7 +126,8 @@ class TrainConfig(BaseModel):
         training_config = TrainingConfig(**yaml_dict['training'])
         dataset_config = DatasetConfig(
             train = TrainDatasetConfig(**yaml_dict['dataset']['train']), 
-            test = TestDatasetConfig(**yaml_dict['dataset']['test']))
+            test = TestDatasetConfig(**yaml_dict['dataset']['test'])
+        )
         
         super().__init__(
             mlflow = mlflow_config,
