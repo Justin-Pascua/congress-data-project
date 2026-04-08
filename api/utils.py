@@ -133,26 +133,5 @@ def chunk_and_tokenize(text: str, tokenizer, overlap: int = 50):
                 ], dim = 1)
 
     return {"chunks": torch.cat(chunks, dim = 0),
-            "num_tokens": len(token_ids[-1])}
-
-def model_inference(text: str, tokenizer, model, top_k: int = 1):
-    chunked_input = chunk_and_tokenize(text, tokenizer)
-    chunks = chunked_input["chunks"]
-    out = model(input_ids = chunks)
-    
-    full_logits = out.logits.sum(dim = 0)
-    full_probs = full_logits.softmax(dim = -1)
-    
-    top_probs, top_labels = torch.topk(full_probs, k = top_k)
-    top_labels_decoded = raw_encoder.inverse_transform(top_labels)
-    other_prob = 1 - top_probs.sum()
-    
-    prob_response = {label.item(): probs.item() for label, probs in 
-                     zip(top_labels_decoded, top_probs)}
-    if other_prob > 1e-3:
-        prob_response = prob_response | {"Other": other_prob}
-
-    return {"prediction": top_labels_decoded[0].item(),
-            "probabilities": prob_response,
-            "num_tokens": chunked_input["num_tokens"],
-            "num_chunks": chunks.shape[0]}
+            "num_tokens": len(token_ids[-1]),
+            "num_chunks": len(chunks)}
