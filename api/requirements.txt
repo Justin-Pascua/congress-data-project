@@ -1,0 +1,7 @@
+fastapi==0.117.1
+uvicorn
+numpy
+pandas
+transformers==5.3.0
+mlflow==3.10.1
+scikit-learn==1.8.0

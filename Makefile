@@ -19,3 +19,7 @@ train:
 .PHONY: eval
 eval:
 	@python -m ml.main.eval
+
+.PHONY: model-api
+model-api:
+	uvicorn api.main:app --reload

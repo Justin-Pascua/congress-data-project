@@ -3,6 +3,7 @@
 .venv/
 .env*
 
+dev_utils/
 demo.ipynb
 db_scripts/
 
@@ -21,4 +22,4 @@ ml/main/eval-config.yaml
 mlruns/
 mlflow_data/
 
-dev_utils/
+api/model
