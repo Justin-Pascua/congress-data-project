@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Response, status, HTTPException, Depends, APIRouter
+from fastapi import APIRouter
 
 from ..model import macro_inference, chunk_inference
 from ..schema import InfRequest, MacroInfResponse, ChunkInfResponse

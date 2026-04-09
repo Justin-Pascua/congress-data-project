@@ -22,4 +22,8 @@ eval:
 
 .PHONY: model-api
 model-api:
-	uvicorn api.main:app --reload
+	@if [ "$(ENV)" = "container" ]; then \
+		docker run -p 8000:8000 congress-data-project-model-api:1.0.0; \
+	else \
+		uvicorn api.main:app --reload; \
+	fi
