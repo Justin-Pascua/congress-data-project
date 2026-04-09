@@ -2,6 +2,7 @@ import torch
 from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
+from ..exceptions import EmptyDatasetError
 
 import re
 from typing import List
@@ -254,7 +255,6 @@ def chunk_dataframe(df: pd.DataFrame, tokenizer, overlap: int = 50,
     chunk_texts = tokenizer.batch_decode(
         chunk_token_ids, skip_special_tokens=True
     )
-
     return pd.DataFrame(
         {
             'summary': chunk_texts,
@@ -290,6 +290,8 @@ def process_bills(bills: List[Bill], simplify: bool, chunk: bool, tokenizer = No
 
     df = pd.DataFrame(list(zip(summaries, labels)), columns = ['summary', 'label'])
     df = df.dropna().reset_index(drop = True)
+    if len(df) == 0:
+        raise EmptyDatasetError("All samples dropped in preprocessing")
     
     if simplify:
         df['numericalLabel'] = simplified_encoder.transform(df['label'])
